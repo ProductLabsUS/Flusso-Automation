@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment - NEVER COMMIT THESE
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# Logs
+*.log
+audit.log
+logs/
+workflow_logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+test_*.py
+test_*.pdf
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Project specific
+temp/
+downloads/
+uploads/
+
+# Debug/Development scripts
+view_vision_results.py
