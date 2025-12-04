@@ -1,3 +1,8 @@
+# Force CPU-only PyTorch (MUST be at top of file)
+# This prevents downloading 3.5GB+ of CUDA libraries
+--find-links https://download.pytorch.org/whl/cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 ##############################
 # Core API Framework
 ##############################
@@ -33,10 +38,11 @@ google-cloud-aiplatform>=1.129.0
 pinecone>=5.0.0
 
 ##############################
-# CLIP + Vision Embeddings
+# CLIP + Vision Embeddings (CPU-only)
 ##############################
-torch>=2.3.0,<3.0.0
-torchvision>=0.18.0,<1.0.0
+# Note: CPU-only PyTorch index is declared at top of file
+torch==2.3.0+cpu
+torchvision==0.18.0+cpu
 open-clip-torch>=3.2.0
 ftfy>=6.2.0
 regex>=2024.0.0
