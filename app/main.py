@@ -6,7 +6,7 @@ Webhook endpoint for Freshdesk ticket automation
 import logging
 import hashlib
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diskcache import Cache
@@ -77,6 +77,7 @@ app.add_middleware(
 # HEALTH ENDPOINTS
 # ---------------------------------------------------
 @app.get("/")
+@app.head("/")  # Support HEAD for load balancer health checks
 async def root():
     return {
         "service": "Flusso Workflow Automation",
@@ -85,7 +86,14 @@ async def root():
     }
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty response for favicon requests to avoid 404 spam in logs."""
+    return Response(status_code=204)  # No Content
+
+
 @app.get("/health")
+@app.head("/health")  # Support HEAD for health checks
 async def health_check():
     """Basic health check - returns quickly."""
     return {
