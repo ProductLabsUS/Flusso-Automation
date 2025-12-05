@@ -185,7 +185,15 @@ Visual matches have low confidence. Reason: {vision_reason}
 - Ask customer to confirm if the suggested product is correct
 """
 
+    # Get current date for accurate date comparisons
+    from datetime import datetime
+    current_date = datetime.now().strftime("%B %d, %Y")  # e.g., "December 05, 2025"
+    current_date_iso = datetime.now().strftime("%Y-%m-%d")  # e.g., "2025-12-05"
+
     meta = f"""
+TODAY'S DATE: {current_date} ({current_date_iso})
+Use this date for ALL date comparisons. Any date before {current_date_iso} is in the PAST.
+
 DECISION METRICS:
 - Enough Information: {enough_info}
 - Hallucination Risk: {risk:.2f}
@@ -249,8 +257,8 @@ RETRIEVED CONTEXT:
             confidence_label = "🟡 MEDIUM"
             confidence_color = "#eab308"  # yellow
         else:
-            confidence_label = "🔴 LOW"
-            confidence_color = "#ef4444"  # red
+            confidence_label = "⚪ LOW"
+            confidence_color = "#6b7280"  # red
         
         # Convert markdown-style formatting in response to HTML
         html_response = convert_to_html(response_text)

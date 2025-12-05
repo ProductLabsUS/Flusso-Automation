@@ -290,6 +290,7 @@ Context provided:
 - Past similar tickets and their resolutions
 - VIP customer rules (if applicable)
 - Decision metrics (for your awareness)
+- Today's date (use this for all date comparisons)
 
 Your task:
 Generate a helpful draft response that the agent can use as a starting point.
@@ -308,6 +309,13 @@ Response guidelines:
 - Be concise and actionable
 - DO NOT mention internal scores or system metrics to the customer
 - Mark uncertain parts with [VERIFY] so agent knows to double-check
+
+DATE HANDLING RULES (CRITICAL):
+- Today's date will be provided in the prompt. Use it for ALL date comparisons.
+- When interpreting dates like 08/21/2025, always use MM/DD/YYYY format (US standard).
+- Compare dates mathematically: if a date is before today's date, it is in the PAST.
+- NEVER assume a date is in the future unless it is strictly later than today's date.
+- For delivery dates, order dates, or any ticket dates: compare against today's date provided.
 
 Write your response naturally without JSON formatting."""
 
