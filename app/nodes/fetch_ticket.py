@@ -137,6 +137,8 @@ def fetch_ticket_from_freshdesk(state: TicketState) -> Dict[str, Any]:
             
             # Store attachment metadata
             "attachment_summary": attachment_summary,
+            # Preserve raw attachments (with URLs) for attachment_analyzer_tool
+            "attachments_raw": attachments,
 
             "requester_email": data.get("requester_email", ""),
             "requester_name": data.get("requester_name", "Unknown"),

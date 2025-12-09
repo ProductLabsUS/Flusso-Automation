@@ -113,7 +113,8 @@ def react_agent_loop(state: TicketState) -> Dict[str, Any]:
     ticket_subject = state.get("ticket_subject", "")
     ticket_text = state.get("ticket_text", "")
     ticket_images = state.get("ticket_images", [])
-    attachments = state.get("attachment_summary", [])
+    # Prefer raw attachments (with URLs) for the analyzer; fallback to summary
+    attachments = state.get("attachments_raw") or state.get("attachment_summary") or []
     
     logger.info(f"{STEP_NAME} | Ticket #{ticket_id}: {len(ticket_text)} chars, {len(ticket_images)} images, {len(attachments)} attachments")
     
@@ -480,3 +481,12 @@ def react_agent_loop(state: TicketState) -> Dict[str, Any]:
         **legacy_updates,
         "audit_events": audit_events
     }
+
+def _run_tool(tool, kwargs: Dict[str, Any]):
+    if hasattr(tool, "run"):
+        return tool.run(**kwargs)
+    if hasattr(tool, "invoke") and callable(getattr(tool, "invoke")):
+        return tool.invoke(kwargs)
+    if hasattr(tool, "_run"):
+        return tool._run(**kwargs)
+    raise AttributeError("Tool does not have a valid execution method.")
