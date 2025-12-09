@@ -158,7 +158,12 @@ def react_agent_loop(state: TicketState) -> Dict[str, Any]:
             
             # Execute finish tool directly
             from app.tools.finish import finish_tool
-            tool_output = finish_tool.invoke(finish_input)
+            if hasattr(finish_tool, "invoke"):
+                tool_output = finish_tool.invoke(finish_input)
+            elif hasattr(finish_tool, "run"):
+                tool_output = finish_tool.run(**finish_input)
+            else:
+                tool_output = finish_tool._run(**finish_input)
             
             iterations.append({
                 "iteration": iteration_num,

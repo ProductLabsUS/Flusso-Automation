@@ -73,13 +73,15 @@ def product_search_tool(
     try:
         client = get_pinecone_client()
         
-        # Strategy 1: Direct model number metadata filter (highest accuracy)
-        if model_number:
+        # Normalize model_number for metadata lookup
+        normalized_model = model_number.strip().upper() if model_number else None
+
+        # Strategy 1: Direct model number metadata filter (highest accuracy, no semantic fallback if match found)
+        if normalized_model:
             logger.info(f"[PRODUCT_SEARCH] Strategy: Direct model number lookup")
-            # Use text embedding but filter by exact model
             vector = embed_text_clip(query)
             
-            filter_dict = {"model_no": {"$eq": model_number.upper()}}
+            filter_dict = {"model_no": {"$eq": normalized_model}}
             if category:
                 filter_dict["product_category"] = {"$eq": category}
             
@@ -92,7 +94,7 @@ def product_search_tool(
                     "products": products,
                     "count": len(products),
                     "search_method": "model_number",
-                    "message": f"Found {len(products)} exact match(es) for model {model_number}"
+                    "message": f"Found {len(products)} exact match(es) for model {normalized_model}"
                 }
         
         # Strategy 2: Semantic search with optional category filter

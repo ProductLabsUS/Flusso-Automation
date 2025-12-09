@@ -11,20 +11,7 @@ from app.tools.document_search import document_search_tool
 from app.tools.vision_search import vision_search_tool
 from app.tools.past_tickets import past_tickets_search_tool
 from app.tools.finish import finish_tool
-from app.tools.attachment_classifier_tool import attachment_type_classifier_tool
-from app.tools.multimodal_document_analyzer import multimodal_document_analyzer_tool
-from app.tools.ocr_image_analyzer import ocr_image_analyzer_tool
-
-tools = [
-    attachment_type_classifier_tool,
-    multimodal_document_analyzer_tool,
-    ocr_image_analyzer_tool,
-    product_search_tool,
-    vision_search_tool,
-    document_search_tool,
-    past_tickets_search_tool,
-    finish_tool
-]
+from app.tools.attachment_analyzer import attachment_analyzer_tool
 
 
 logger = logging.getLogger(__name__)
@@ -132,9 +119,19 @@ def _execute_tool(
     """
     
     try:
+        def _run_tool(tool, kwargs: Dict[str, Any]):
+            """Execute a LangChain tool with best-effort method resolution."""
+            if hasattr(tool, "invoke"):
+                return tool.invoke(kwargs)
+            if hasattr(tool, "run"):
+                return tool.run(**kwargs)
+            if hasattr(tool, "_run"):
+                return tool._run(**kwargs)
+            raise AttributeError("Tool has no executable method (invoke/run/_run)")
+
         # Map action to tool function
         if action == "product_search_tool":
-            output = product_search_tool.invoke(action_input)
+            output = _run_tool(product_search_tool, action_input or {})
             tool_results["product_search"] = output
             
             if output.get("success"):
@@ -142,7 +139,7 @@ def _execute_tool(
                 obs = f"Found {count} product(s). "
                 if output.get("products"):
                     top = output["products"][0]
-                    obs += f"Top match: {top['model_no']} - {top['product_title']} (score: {top['similarity_score']}%)"
+                    obs += f"Top match: {top.get('model_no')} - {top.get('product_title')} (score: {top.get('similarity_score')}%)"
                 return output, obs
             else:
                 return output, f"No products found: {output.get('message')}"
@@ -158,7 +155,7 @@ def _execute_tool(
                 if model or name:
                     action_input["product_context"] = model or name
 
-            output = document_search_tool.invoke(action_input)
+            output = _run_tool(document_search_tool, action_input)
             tool_results["document_search"] = output
             
             if output.get("success"):
@@ -173,21 +170,22 @@ def _execute_tool(
         
         elif action == "vision_search_tool":
             # Inject ticket_images into action_input
+            action_input = dict(action_input or {})
             action_input["image_urls"] = ticket_images
-            output = vision_search_tool.invoke(action_input)
+            output = _run_tool(vision_search_tool, action_input)
             tool_results["vision_search"] = output
             
             if output.get("success"):
                 quality = output.get("match_quality")
                 count = output.get("count", 0)
                 obs = f"Vision match quality: {quality}. Found {count} match(es). "
-                obs += output.get("reaFsoning", "")
+                obs += output.get("reasoning", "")
                 return output, obs
             else:
                 return output, f"Vision search failed: {output.get('message')}"
         
         elif action == "past_tickets_search_tool":
-            output = past_tickets_search_tool.invoke(action_input)
+            output = _run_tool(past_tickets_search_tool, action_input or {})
             tool_results["past_tickets"] = output
             
             if output.get("success"):
@@ -202,14 +200,15 @@ def _execute_tool(
         
         elif action == "attachment_analyzer_tool":
             # Inject attachments into action_input
+            action_input = dict(action_input or {})
             action_input["attachments"] = attachments
-            output = attachment_analyzer_tool.invoke(action_input)
+            output = _run_tool(attachment_analyzer_tool, action_input)
             tool_results["attachment_analysis"] = output
             
             if output.get("success"):
                 extracted = output.get("extracted_info", {})
                 models = extracted.get("model_numbers", [])
-                obs = f"Analyzed {output.get('count', 0)} document(s). "
+                obs = f"Analyzed {output.get('count', 0)} attachment(s). "
                 if models:
                     obs += f"Model numbers: {', '.join(models[:5])}"
                 else:
@@ -219,18 +218,18 @@ def _execute_tool(
                 return output, f"Attachment analysis failed: {output.get('message')}"
         
         elif action == "finish_tool":
-            output = finish_tool.invoke(action_input)
+            output = _run_tool(finish_tool, action_input or {})
             obs = f"Finished. {output.get('summary', '')}"
             return output, obs
         
         else:
             obs = f"Unknown tool: {action}"
-            return {"error": obs}, obs
+            return {"error": obs, "success": False}, obs
             
     except Exception as e:
         logger.error(f"Tool execution error: {e}", exc_info=True)
         obs = f"Tool execution failed: {str(e)}"
-        return {"error": obs}, obs
+        return {"error": obs, "success": False}, obs
 
 
 def _populate_legacy_fields(
@@ -352,6 +351,9 @@ def _populate_legacy_fields(
             )
     
     multimodal_context = "\n".join(context_sections) if context_sections else "No relevant context found."
+    if not multimodal_context or len(multimodal_context.strip()) < 50:
+        logger.warning("Multimodal context is empty or too short!")
+        multimodal_context = "No context gathered. Agent did not retrieve sufficient information."
     
     # Build source_documents for citations (increased from 5 to 10 - improvement from improvements.md)
     source_documents = []
