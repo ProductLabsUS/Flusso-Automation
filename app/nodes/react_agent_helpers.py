@@ -137,63 +137,126 @@ def _execute_tool(
     identified_product: Optional[Dict[str, Any]] = None
 ) -> Tuple[Dict[str, Any], str]:
     """
-    Execute the chosen tool and return (output, observation_summary)
+    Execute the chosen tool with proper parameter handling.
+    
+    CRITICAL FIXES:
+    1. Proper LangChain tool invocation using .run()
+    2. Correct parameter wrapping in tool_input
+    3. Attachment passing with proper field names
+    4. Model number auto-detection for product search
     """
     
     try:
-        def _run_tool(tool, kwargs):
+        # Helper to run LangChain tools properly
+        def _run_langchain_tool(tool, params: Dict[str, Any]) -> Any:
             """
-            Standard execution wrapper for LangChain Tools.
-            All tools in LC v1 expect a single argument called `tool_input`.
+            Standard LangChain tool execution.
+            Always wraps params in 'tool_input' key.
             """
-            # If the tool expects a single dict/string input, pass as tool_input
-            if "tool_input" not in kwargs:
-                # Wrap entire kwargs as tool_input
-                return tool.run(tool_input=kwargs)
-            
-            # If caller already prepared "tool_input", pass through
-            return tool.run(**kwargs)
-
-        # ------------------------------------------------------
+            try:
+                # LangChain tools expect tool_input parameter
+                return tool.run(tool_input=params)
+            except TypeError:
+                # Fallback: try direct invocation
+                return tool.invoke(params)
+        
+        # -----------------------------------------------------------
         # AUTO-DETECT MODEL NUMBERS FOR PRODUCT SEARCH
-        # ------------------------------------------------------
+        # -----------------------------------------------------------
         def _looks_like_model_number(text: Any) -> bool:
+            """Check if text looks like a product model number"""
+            if not isinstance(text, str):
+                return False
             import re
-            return isinstance(text, str) and bool(re.match(r"^[A-Za-z0-9\-\.]{4,25}$", text))
-
-        if action == "product_search_tool":
-            # Make sure action_input is a dict we can safely mutate
+            # Match patterns like: 100.1170, HS6270MB, 160.1168-9862
+            return bool(re.match(r"^[A-Z0-9]{1,4}[\.\-]?[0-9]{3,5}[\-A-Z0-9]*$", text.strip(), re.I))
+        
+        # -----------------------------------------------------------
+        # 1. ATTACHMENT ANALYZER TOOL
+        # -----------------------------------------------------------
+        if action == "attachment_analyzer_tool":
+            logger.info(f"[TOOL_EXEC] Executing attachment_analyzer_tool")
+            logger.info(f"[TOOL_EXEC] Available attachments: {len(attachments)}")
+            
+            # CRITICAL FIX: Ensure attachments parameter is set
+            if not action_input:
+                action_input = {}
+            
+            # Always pass attachments explicitly
+            action_input["attachments"] = attachments
+            
+            # Set focus if not provided
+            if "focus" not in action_input:
+                action_input["focus"] = "model_numbers"
+            
+            logger.info(f"[TOOL_EXEC] Calling with {len(attachments)} attachments")
+            
+            output = _run_langchain_tool(attachment_analyzer_tool, action_input)
+            tool_results["attachment_analysis"] = output
+            
+            if output.get("success"):
+                extracted = output.get("extracted_info", {})
+                models = extracted.get("model_numbers", [])
+                obs = f"Analyzed {output.get('count', 0)} attachment(s). "
+                if models:
+                    obs += f"Found model numbers: {', '.join(models[:5])}"
+                    if len(models) > 5:
+                        obs += f" (and {len(models)-5} more)"
+                else:
+                    obs += "No model numbers extracted."
+                return output, obs
+            else:
+                return output, f"Attachment analysis failed: {output.get('message')}"
+        
+        # -----------------------------------------------------------
+        # 2. PRODUCT SEARCH TOOL
+        # -----------------------------------------------------------
+        elif action == "product_search_tool":
+            logger.info(f"[TOOL_EXEC] Executing product_search_tool")
+            
+            # Make action_input mutable
             action_input = dict(action_input or {})
-            # If LLM used `query` instead of `model_number`, and it looks like a model number → fix it
-            if "model_number" not in action_input:
-                q = action_input.get("query")
-                if _looks_like_model_number(q):
-                    action_input["model_number"] = q
-                    action_input.pop("query", None)
-
-        # Map action to tool function
-        if action == "product_search_tool":
-            output = _run_tool(product_search_tool, action_input or {})
+            
+            # Auto-fix: If query looks like model number, set model_number parameter
+            query = action_input.get("query", "")
+            if query and _looks_like_model_number(query) and "model_number" not in action_input:
+                logger.info(f"[TOOL_EXEC] Auto-detected model number in query: {query}")
+                action_input["model_number"] = query
+                action_input.pop("query", None)  # Remove query param
+            
+            output = _run_langchain_tool(product_search_tool, action_input)
             tool_results["product_search"] = output
+            
             if output.get("success"):
                 count = output.get("count", 0)
                 obs = f"Found {count} product(s). "
                 if output.get("products"):
                     top = output["products"][0]
-                    obs += f"Top match: {top.get('model_no')} - {top.get('product_title')} (score: {top.get('similarity_score')}%)"
+                    obs += f"Top match: {top.get('model_no')} - {top.get('product_title')} "
+                    obs += f"(similarity: {top.get('similarity_score')}%)"
                 return output, obs
             else:
                 return output, f"No products found: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 3. DOCUMENT SEARCH TOOL
+        # -----------------------------------------------------------
         elif action == "document_search_tool":
+            logger.info(f"[TOOL_EXEC] Executing document_search_tool")
+            
             action_input = dict(action_input or {})
-            if identified_product and not action_input.get("product_context"):
+            
+            # Auto-add product context if available
+            if identified_product and "product_context" not in action_input:
                 model = identified_product.get("model")
                 name = identified_product.get("name")
                 if model or name:
                     action_input["product_context"] = model or name
-            output = _run_tool(document_search_tool, action_input)
+                    logger.info(f"[TOOL_EXEC] Added product context: {action_input['product_context']}")
+            
+            output = _run_langchain_tool(document_search_tool, action_input)
             tool_results["document_search"] = output
+            
             if output.get("success"):
                 count = output.get("count", 0)
                 obs = f"Found {count} document(s). "
@@ -203,12 +266,23 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"No documents found: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 4. VISION SEARCH TOOL
+        # -----------------------------------------------------------
         elif action == "vision_search_tool":
+            logger.info(f"[TOOL_EXEC] Executing vision_search_tool")
+            
             action_input = dict(action_input or {})
+            
+            # Always use ticket images
             action_input["image_urls"] = ticket_images
-            output = _run_tool(vision_search_tool, action_input)
+            
+            logger.info(f"[TOOL_EXEC] Searching {len(ticket_images)} image(s)")
+            
+            output = _run_langchain_tool(vision_search_tool, action_input)
             tool_results["vision_search"] = output
+            
             if output.get("success"):
                 quality = output.get("match_quality")
                 count = output.get("count", 0)
@@ -217,10 +291,16 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"Vision search failed: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 5. PAST TICKETS SEARCH TOOL
+        # -----------------------------------------------------------
         elif action == "past_tickets_search_tool":
-            output = _run_tool(past_tickets_search_tool, action_input or {})
+            logger.info(f"[TOOL_EXEC] Executing past_tickets_search_tool")
+            
+            output = _run_langchain_tool(past_tickets_search_tool, action_input or {})
             tool_results["past_tickets"] = output
+            
             if output.get("success"):
                 count = output.get("count", 0)
                 obs = f"Found {count} similar past ticket(s). "
@@ -230,70 +310,87 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"No past tickets found: {output.get('message')}"
-
-        elif action == "attachment_analyzer_tool":
-            action_input = dict(action_input or {})
-            action_input["attachments"] = attachments
-            output = _run_tool(attachment_analyzer_tool, action_input)
-            tool_results["attachment_analysis"] = output
-            if output.get("success"):
-                extracted = output.get("extracted_info", {})
-                models = extracted.get("model_numbers", [])
-                obs = f"Analyzed {output.get('count', 0)} attachment(s). "
-                if models:
-                    obs += f"Model numbers: {', '.join(models[:5])}"
-                else:
-                    obs += "No model numbers extracted."
-                return output, obs
-            else:
-                return output, f"Attachment analysis failed: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 6. ATTACHMENT TYPE CLASSIFIER TOOL
+        # -----------------------------------------------------------
         elif action == "attachment_type_classifier_tool":
+            logger.info(f"[TOOL_EXEC] Executing attachment_type_classifier_tool")
+            
             action_input = dict(action_input or {})
             action_input["attachments"] = attachments
-            output = _run_tool(attachment_type_classifier_tool, action_input)
+            
+            output = _run_langchain_tool(attachment_type_classifier_tool, action_input)
             tool_results["attachment_classification"] = output
+            
             if output.get("success"):
-                obs = f"Attachment types classified: {[a['detected_type'] for a in output.get('attachments', [])]}"
+                types_list = [a.get('detected_type', 'unknown') for a in output.get('attachments', [])]
+                obs = f"Attachment types classified: {types_list}"
                 return output, obs
             else:
                 return output, f"Attachment type classification failed: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 7. MULTIMODAL DOCUMENT ANALYZER TOOL
+        # -----------------------------------------------------------
         elif action == "multimodal_document_analyzer_tool":
+            logger.info(f"[TOOL_EXEC] Executing multimodal_document_analyzer_tool")
+            
             action_input = dict(action_input or {})
             action_input["attachments"] = attachments
-            output = _run_tool(multimodal_document_analyzer_tool, action_input)
+            
+            output = _run_langchain_tool(multimodal_document_analyzer_tool, action_input)
             tool_results["multimodal_doc_analysis"] = output
+            
             if output.get("success"):
                 obs = f"Multimodal document analysis complete: {output.get('count', 0)} document(s) processed"
                 return output, obs
             else:
                 return output, f"Multimodal document analysis failed: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 8. OCR IMAGE ANALYZER TOOL
+        # -----------------------------------------------------------
         elif action == "ocr_image_analyzer_tool":
+            logger.info(f"[TOOL_EXEC] Executing ocr_image_analyzer_tool")
+            
             action_input = dict(action_input or {})
-            # Accepts image_urls list
+            
+            # Use ticket images if not provided
             if not action_input.get("image_urls"):
                 action_input["image_urls"] = ticket_images
-            output = _run_tool(ocr_image_analyzer_tool, action_input)
+            
+            logger.info(f"[TOOL_EXEC] Processing {len(action_input.get('image_urls', []))} image(s) with OCR")
+            
+            output = _run_langchain_tool(ocr_image_analyzer_tool, action_input)
             tool_results["ocr_image_analysis"] = output
+            
             if output.get("success"):
                 obs = f"OCR image analysis complete: {len(output.get('results', []))} image(s) processed"
                 return output, obs
             else:
                 return output, f"OCR image analysis failed: {output.get('message')}"
-
+        
+        # -----------------------------------------------------------
+        # 9. FINISH TOOL
+        # -----------------------------------------------------------
         elif action == "finish_tool":
-            output = _run_tool(finish_tool, action_input or {})
+            logger.info(f"[TOOL_EXEC] Executing finish_tool")
+            
+            output = _run_langchain_tool(finish_tool, action_input or {})
             obs = f"Finished. {output.get('summary', '')}"
             return output, obs
-
+        
+        # -----------------------------------------------------------
+        # UNKNOWN TOOL
+        # -----------------------------------------------------------
         else:
+            logger.error(f"[TOOL_EXEC] Unknown tool: {action}")
             obs = f"Unknown tool: {action}"
             return {"error": obs, "success": False}, obs
 
     except Exception as e:
-        logger.error(f"Tool execution error: {e}", exc_info=True)
+        logger.error(f"[TOOL_EXEC] Tool execution failed: {e}", exc_info=True)
         obs = f"Tool execution failed: {str(e)}"
         return {"error": obs, "success": False}, obs
 

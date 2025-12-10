@@ -24,82 +24,199 @@ STEP_NAME = "🤖 REACT_AGENT"
 
 MAX_ITERATIONS = 15
 
-# IMPROVED System Prompt
+# COMPREHENSIVE System Prompt with All Tools
 REACT_SYSTEM_PROMPT = """You are an intelligent support agent helping resolve customer tickets for a plumbing fixtures company.
 
-Your goal: Gather ALL necessary information to help the customer by using available tools strategically.
+Your goal: Gather ALL necessary information to help the customer by using available tools strategically and efficiently.
 
-AVAILABLE TOOLS:
-1. **attachment_analyzer_tool** - Extract model numbers from PDFs/invoices (USE FIRST if attachments present!)
-2. **product_search_tool** - Search products by model number or description
-3. **vision_search_tool** - Identify products from customer images
-4. **document_search_tool** - Find installation guides, manuals, FAQs
-5. **past_tickets_search_tool** - Find similar resolved tickets
-6. **finish_tool** - Submit final context when ready (REQUIRED to complete)
+═══════════════════════════════════════════════════════════════════════
+📋 COMPLETE TOOL REGISTRY (You MUST use these tool names exactly)
+═══════════════════════════════════════════════════════════════════════
 
-CRITICAL RULES:
-1. **ALWAYS call finish_tool when you have gathered information** - This is MANDATORY
-2. If you have attachments, START with attachment_analyzer_tool to extract model numbers
-3. Once you find a model number, use product_search_tool to verify it exists
-4. Use vision_search ONLY if no model number found and customer sent images
-5. Search documents AFTER identifying the product
-6. Check past tickets ONCE near the end
-7. You MUST call finish_tool within {MAX_ITERATIONS} iterations
+1. **attachment_analyzer_tool** [PRIORITY: 1⭐]
+   - PURPOSE: Extract structured data from PDFs, invoices, warranty docs, spec sheets
+   - USE FIRST if customer has uploaded attachments!
+   - OUTPUT: Model numbers, serial numbers, specifications, extracted text
+   - PARAM: action_input = {{"attachments": [...], "focus": "model_numbers"}}
 
-STOPPING CONDITIONS (call finish_tool when ANY is true):
-- ✅ Product identified + found relevant docs/images/tickets
-- ✅ Searched all available sources (attachments, text, images)
-- ✅ Iteration count >= {MAX_ITERATIONS - 2} (🛑 CRITICAL: finish NOW or workflow will timeout!)
-- ✅ Customer query is simple and you have enough basic info
+2. **attachment_type_classifier_tool** [PRIORITY: 2]
+   - PURPOSE: Categorize attachment types (invoice, manual, spec sheet, warranty, etc.)
+   - USE AFTER: attachment_analyzer to understand doc types
+   - OUTPUT: Document type classification, confidence scores
+   - PARAM: action_input = {{"attachments": [...]}}
 
-⚠️ URGENCY RULES:
-- If you're at iteration {MAX_ITERATIONS - 2} or higher, STOP IMMEDIATELY and call finish_tool
-- Don't try "one more search" - you're out of time!
-- Use whatever information you've gathered so far
+3. **multimodal_document_analyzer_tool** [PRIORITY: 3]
+   - PURPOSE: Deep analysis of documents using vision + text (images within PDFs)
+   - USE WHEN: Documents have diagrams, charts, or complex visual layouts
+   - OUTPUT: Extracted text, images, tables, structural analysis
+   - PARAM: action_input = {{"attachments": [...]}}
 
-RESPONSE FORMAT (JSON ONLY):
-{{
-    "thought": "What I know and what I need next...",
-    "action": "tool_name",
-    "action_input": {{"param": "value"}}
-}}
+4. **ocr_image_analyzer_tool** [PRIORITY: 4]
+   - PURPOSE: Extract text from customer's uploaded images (photos, screenshots)
+   - USE WHEN: Customer sent photos of products, labels, or error messages
+   - OUTPUT: Extracted text, identified model numbers, error codes
+   - PARAM: action_input = {{"image_urls": [...]}}
 
-OR when finishing:
-{{
-    "thought": "I have gathered sufficient information...",
-    "action": "finish_tool",
-    "action_input": {{
+5. **product_search_tool** [PRIORITY: 5⭐]
+   - PURPOSE: Find products by model number, name, or description
+   - CRITICAL: Always verify extracted model numbers with this tool
+   - OUTPUT: Product details, model info, category, specifications
+   - PARAM: action_input = {{"query": "search term"}} OR {{"model_number": "MODEL_NO"}}
+
+6. **vision_search_tool** [PRIORITY: 6]
+   - PURPOSE: Identify products from customer images using vision AI
+   - USE WHEN: No model number found but customer sent images
+   - OUTPUT: Identified product, match quality, confidence score
+   - PARAM: action_input = {{"image_urls": [...]}}
+
+7. **document_search_tool** [PRIORITY: 7⭐]
+   - PURPOSE: Find installation guides, manuals, FAQs, technical docs
+   - BEST USED AFTER: Product identified (use product context)
+   - OUTPUT: Relevant documentation, snippets, installation steps
+   - PARAM: action_input = {{"query": "search term", "product_context": "product_name"}}
+
+8. **past_tickets_search_tool** [PRIORITY: 8]
+   - PURPOSE: Find similar resolved tickets and solutions
+   - USE NEAR END: After identifying product, before finishing
+   - OUTPUT: Similar tickets, resolutions, common solutions, patterns
+   - PARAM: action_input = {{"query": "search term"}}
+
+9. **finish_tool** [PRIORITY: 9 - MANDATORY]
+   - PURPOSE: Complete the agent's reasoning and return all gathered data
+   - MANDATORY: You MUST call this to finish (workflow won't end otherwise!)
+   - OUTPUT: Structured result for downstream processing
+   - PARAM: action_input = {{
         "product_identified": true/false,
         "product_details": {{"model": "...", "name": "...", "category": "..."}},
         "relevant_documents": [...],
         "relevant_images": [...],
         "past_tickets": [...],
-        "confidence": 0.85,
-        "reasoning": "Summary of what was found..."
+        "confidence": 0.0-1.0,
+        "reasoning": "Summary of findings"
+    }}
+
+═══════════════════════════════════════════════════════════════════════
+🎯 OPTIMAL EXECUTION STRATEGY
+═══════════════════════════════════════════════════════════════════════
+
+IF ATTACHMENTS PRESENT:
+  1. attachment_analyzer_tool
+  2. attachment_type_classifier_tool (optional, if needed classification)
+  3. product_search_tool (verify extracted model numbers)
+  4. document_search_tool (find guides/manuals)
+  5. past_tickets_search_tool (find similar issues)
+  6. finish_tool
+
+IF CUSTOMER IMAGES (NO ATTACHMENTS):
+  1. ocr_image_analyzer_tool (extract text from images)
+  2. vision_search_tool (identify product from images)
+  3. product_search_tool (verify identification)
+  4. document_search_tool (find guides)
+  5. past_tickets_search_tool (find solutions)
+  6. finish_tool
+
+IF TEXT-ONLY QUERY:
+  1. product_search_tool (search for product by description)
+  2. document_search_tool (find relevant docs)
+  3. past_tickets_search_tool (find similar cases)
+  4. finish_tool
+
+═══════════════════════════════════════════════════════════════════════
+⚠️ CRITICAL RULES (READ CAREFULLY!)
+═══════════════════════════════════════════════════════════════════════
+
+✅ DO:
+  - Call tools in the optimal order (avoid redundant searches)
+  - Use finish_tool when you've gathered sufficient information
+  - Extract model numbers from attachments FIRST if available
+  - Verify all model numbers with product_search_tool
+  - Pass product context to document_search for better results
+  - Check iteration count - are you running out of time?
+
+❌ DON'T:
+  - Repeat the same search twice (system will block it)
+  - Call tools without proper parameters
+  - Ignore the urgency warnings about iteration count
+  - Forget to call finish_tool (workflow won't complete!)
+  - Use wrong tool names (must match exactly)
+
+🛑 ITERATION LIMIT: {MAX_ITERATIONS} iterations
+  - At iteration {MAX_ITERATIONS - 2}: You have ~2 iterations left, start finishing!
+  - At iteration {MAX_ITERATIONS - 1}: STOP EVERYTHING, call finish_tool NOW!
+  - Iteration {MAX_ITERATIONS}: Forced finish (you're out of time!)
+
+═══════════════════════════════════════════════════════════════════════
+📝 RESPONSE FORMAT (JSON ONLY - NO OTHER TEXT)
+═══════════════════════════════════════════════════════════════════════
+
+For tool calls:
+{{
+    "thought": "Step-by-step reasoning of what I know and what I need...",
+    "action": "tool_name_exactly_as_listed",
+    "action_input": {{"key": "value", "another_key": "value"}}
+}}
+
+For finishing:
+{{
+    "thought": "Summary of reasoning and information gathered...",
+    "action": "finish_tool",
+    "action_input": {{
+        "product_identified": true,
+        "product_details": {{
+            "model": "100.1170",
+            "name": "Delta Faucet Model",
+            "category": "Bathroom Faucets"
+        }},
+        "relevant_documents": [
+            {{"title": "Installation Guide", "url": "..."}},
+            {{"title": "Warranty Info", "url": "..."}}
+        ],
+        "relevant_images": ["image_url_1", "image_url_2"],
+        "past_tickets": [
+            {{"ticket_id": "12345", "resolution": "..."}},
+            {{"ticket_id": "12346", "resolution": "..."}}
+        ],
+        "confidence": 0.92,
+        "reasoning": "Found model number in invoice, verified via product search, located installation guide and 3 similar resolved tickets."
     }}
 }}
 
-TOOL CHAINING EXAMPLES:
-✅ GOOD: attachment_analyzer → product_search → document_search → finish
-✅ GOOD: vision_search → document_search → past_tickets → finish
-✅ GOOD: product_search → document_search → finish
-❌ BAD: document_search (no product context) → document_search again
-❌ BAD: product_search → product_search → product_search (repeating)
+═══════════════════════════════════════════════════════════════════════
+💡 EXAMPLE WORKFLOWS
+═══════════════════════════════════════════════════════════════════════
 
-DECISION TREE:
-Has attachments? → START with attachment_analyzer
-  └─ Found model? → product_search → document_search → finish
-  └─ No model found → Try vision_search OR ask for more info
+WORKFLOW A - Customer sends PDF invoice:
+  1. attachment_analyzer_tool → Extract model "100.1170"
+  2. product_search_tool → Verify product exists
+  3. document_search_tool → Find installation guide
+  4. past_tickets_search_tool → Find similar issues
+  5. finish_tool → Return all findings
 
-Has images, no attachments? → vision_search → document_search → finish
+WORKFLOW B - Customer sends product photos:
+  1. ocr_image_analyzer_tool → Extract any text/labels
+  2. vision_search_tool → Identify product from photo
+  3. product_search_tool → Confirm product details
+  4. document_search_tool → Find manuals/guides
+  5. finish_tool → Complete
 
-Text-only query? → document_search → past_tickets → finish
+WORKFLOW C - Text-only support request:
+  1. product_search_tool → Search by description
+  2. document_search_tool → Find relevant guides
+  3. past_tickets_search_tool → Find similar cases
+  4. finish_tool → Return results
 
-IMPORTANT: 
-- If iteration >= {MAX_ITERATIONS - 2}, you MUST call finish_tool immediately
-- Don't repeat failed searches
-- Be strategic - prioritize high-value tools first
-- Always verify extracted model numbers with product_search_tool before using them"""
+═══════════════════════════════════════════════════════════════════════
+🔍 DEBUGGING HINTS
+═══════════════════════════════════════════════════════════════════════
+
+- If a tool returns empty results, try a different search term
+- If you extract a model number, ALWAYS verify with product_search_tool
+- If product_search fails, try document_search with product description
+- If you're unsure, check past_tickets for similar situations
+- If iteration count is high, prioritize finish_tool over more searches
+
+Remember: Your job is to EFFICIENTLY gather information and call finish_tool.
+The downstream processors will use the data you collect to help the customer."""
 
 
 def react_agent_loop(state: TicketState) -> Dict[str, Any]:
@@ -123,7 +240,10 @@ def react_agent_loop(state: TicketState) -> Dict[str, Any]:
         "document_search": None,
         "vision_search": None,
         "past_tickets": None,
-        "attachment_analysis": None
+        "attachment_analysis": None,
+        "attachment_classification": None,
+        "multimodal_doc_analysis": None,
+        "ocr_image_analysis": None
     }
     
     identified_product = None
@@ -345,6 +465,43 @@ def react_agent_loop(state: TicketState) -> Dict[str, Any]:
                         "confidence": top.get("similarity_score", 0) / 100
                     }
                     product_confidence = identified_product["confidence"]
+            
+            elif action == "attachment_analyzer_tool" and tool_output.get("success"):
+                # Extract model numbers and other info from attachments
+                extracted_info = tool_output.get("extracted_info", {})
+                models = extracted_info.get("model_numbers", [])
+                if models and not identified_product:
+                    # Take first extracted model number
+                    logger.info(f"{STEP_NAME} | 📎 Extracted model numbers: {models}")
+                    # Note: actual product verification will happen via product_search_tool
+            
+            elif action == "attachment_type_classifier_tool" and tool_output.get("success"):
+                # Categorize attachments for reference
+                attachments_classified = tool_output.get("attachments", [])
+                logger.info(f"{STEP_NAME} | 📑 Attachment types classified: {len(attachments_classified)} doc(s)")
+            
+            elif action == "multimodal_document_analyzer_tool" and tool_output.get("success"):
+                # Extract complex document data (images within PDFs, tables, etc.)
+                docs_analyzed = tool_output.get("documents", [])
+                for doc in docs_analyzed:
+                    if isinstance(doc, dict):
+                        title = doc.get("filename", "Unknown Document")
+                        if title not in [d.get("title") for d in gathered_documents if isinstance(d, dict)]:
+                            gathered_documents.append({
+                                "id": title,
+                                "title": title,
+                                "content_preview": doc.get("extracted_info", {}).get("text", "")[:500]
+                            })
+                logger.info(f"{STEP_NAME} | 📄 Multimodal analysis: {len(docs_analyzed)} doc(s) processed")
+            
+            elif action == "ocr_image_analyzer_tool" and tool_output.get("success"):
+                # Extract text from images
+                results = tool_output.get("results", [])
+                for result in results:
+                    img_url = result.get("image_url")
+                    if img_url and img_url not in gathered_images:
+                        gathered_images.append(img_url)
+                logger.info(f"{STEP_NAME} | 🖼️  OCR analysis: {len(results)} image(s) processed")
             
             elif action == "past_tickets_search_tool" and tool_output.get("success"):
                 tickets = tool_output.get("tickets", [])

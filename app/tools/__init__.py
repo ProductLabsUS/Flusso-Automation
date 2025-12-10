@@ -9,6 +9,9 @@ from app.tools.vision_search import vision_search_tool
 from app.tools.past_tickets import past_tickets_search_tool
 from app.tools.attachment_analyzer import attachment_analyzer_tool
 from app.tools.finish import finish_tool
+from app.tools.multimodal_document_analyzer import multimodal_document_analyzer_tool
+from app.tools.ocr_image_analyzer import ocr_image_analyzer_tool
+from app.tools.attachment_classifier_tool import attachment_type_classifier_tool
 
 __all__ = [
     "product_search_tool",
@@ -16,7 +19,10 @@ __all__ = [
     "vision_search_tool",
     "past_tickets_search_tool",
     "attachment_analyzer_tool",
-    "finish_tool"
+    "finish_tool",
+    "multimodal_document_analyzer_tool",
+    "ocr_image_analyzer_tool",
+    "attachment_type_classifier_tool"
 ]
 
 # Tool registry for easy access
@@ -26,5 +32,8 @@ AVAILABLE_TOOLS = {
     "vision_search_tool": vision_search_tool,
     "past_tickets_search_tool": past_tickets_search_tool,
     "attachment_analyzer_tool": attachment_analyzer_tool,
-    "finish_tool": finish_tool
+    "finish_tool": finish_tool,
+    "multimodal_document_analyzer_tool": multimodal_document_analyzer_tool,
+    "ocr_image_analyzer_tool": ocr_image_analyzer_tool,
+    "attachment_type_classifier_tool": attachment_type_classifier_tool
 }
