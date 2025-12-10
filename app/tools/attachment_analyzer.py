@@ -1,5 +1,5 @@
 """
-Attachment Analyzer Tool
+Attachment Analyzer Tool - FIXED
 Wrapper around multimodal_document_analyzer to extract model numbers and entities.
 """
 
@@ -45,11 +45,21 @@ def attachment_analyzer_tool(
         }
 
     try:
-        # Call the underlying multimodal analyzer
-        result = multimodal_document_analyzer_tool.run(
-            attachments=attachments,
-            focus=focus,
-        )
+        # FIXED: Use .invoke() instead of .run()
+        result = multimodal_document_analyzer_tool.invoke({
+            "attachments": attachments,
+            "focus": focus,
+        })
+
+        # Handle case where invoke returns None or error
+        if not result or not isinstance(result, dict):
+            logger.error(f"[ATTACHMENT_ANALYZER] Invalid result from multimodal analyzer: {result}")
+            return {
+                "success": False,
+                "extracted_info": {},
+                "count": 0,
+                "message": "Failed to analyze attachments - invalid response"
+            }
 
         documents = result.get("documents", [])
         entities_list: List[Dict[str, Any]] = []
@@ -58,13 +68,16 @@ def attachment_analyzer_tool(
         for doc in documents:
             extracted = doc.get("extracted_info", {}) if isinstance(doc, dict) else {}
             entities_list.append(extracted)
+            
+            # Extract model numbers from various possible fields
             mn = extracted.get("model_numbers") or extracted.get("models") or []
             if isinstance(mn, list):
                 model_numbers.extend([str(m).strip() for m in mn if str(m).strip()])
             elif isinstance(mn, str) and mn.strip():
                 model_numbers.append(mn.strip())
 
-        model_numbers = list(dict.fromkeys(model_numbers))  # dedupe
+        # Deduplicate while preserving order
+        model_numbers = list(dict.fromkeys(model_numbers))
 
         return {
             "success": True,
@@ -82,5 +95,4 @@ def attachment_analyzer_tool(
             "extracted_info": {},
             "count": 0,
             "message": f"Attachment analysis failed: {str(e)}"
-        }
-
+        }   

@@ -12,7 +12,9 @@ from app.tools.vision_search import vision_search_tool
 from app.tools.past_tickets import past_tickets_search_tool
 from app.tools.finish import finish_tool
 from app.tools.attachment_analyzer import attachment_analyzer_tool
-
+from app.tools.attachment_classifier_tool import attachment_type_classifier_tool
+from app.tools.multimodal_document_analyzer import multimodal_document_analyzer_tool
+from app.tools.ocr_image_analyzer import ocr_image_analyzer_tool
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,26 @@ def _build_agent_context(
             models = extracted.get("model_numbers", [])
             if models:
                 context_parts.append(f"✓ Attachment Analysis: Model numbers extracted: {models}")
+
+        if tool_results.get("attachment_classification"):
+            ac = tool_results["attachment_classification"]
+            if ac.get("success"):
+                types = [f"{a['name']}: {a['detected_type']}" for a in ac.get("attachments", [])]
+                context_parts.append(f"✓ Attachment Classification: {', '.join(types)}")
+
+        if tool_results.get("multimodal_doc_analysis"):
+            mda = tool_results["multimodal_doc_analysis"]
+            if mda.get("success"):
+                context_parts.append(f"✓ Multimodal Doc Analysis: {mda.get('count', 0)} document(s) processed")
+                for doc in mda.get("documents", [])[:2]:
+                    context_parts.append(f"  {doc.get('filename')}: {list(doc.get('extracted_info', {}).keys())}")
+
+        if tool_results.get("ocr_image_analysis"):
+            ocr = tool_results["ocr_image_analysis"]
+            if ocr.get("success"):
+                context_parts.append(f"✓ OCR Image Analysis: {len(ocr.get('results', []))} image(s) processed")
+                for res in ocr.get("results", [])[:2]:
+                    context_parts.append(f"  {res.get('image_url')}: {res.get('text', '')[:60]}...")
     
     # Add urgency if approaching limit - make it VERY prominent
     if iteration_num >= max_iterations - 2:
@@ -119,21 +141,24 @@ def _execute_tool(
     """
     
     try:
-        def _run_tool(tool, kwargs: Dict[str, Any]):
-            """Execute a LangChain tool with best-effort method resolution."""
-            if hasattr(tool, "invoke"):
-                return tool.invoke(kwargs)
-            if hasattr(tool, "run"):
-                return tool.run(**kwargs)
-            if hasattr(tool, "_run"):
-                return tool._run(**kwargs)
-            raise AttributeError("Tool has no executable method (invoke/run/_run)")
+        def _run_tool(tool, kwargs):
+            """
+            Standard execution wrapper for LangChain Tools.
+            All tools in LC v1 expect a single argument called `tool_input`.
+            """
+            # If the tool expects a single dict/string input, pass as tool_input
+            if "tool_input" not in kwargs:
+                # Wrap entire kwargs as tool_input
+                return tool.run(tool_input=kwargs)
+            
+            # If caller already prepared "tool_input", pass through
+            return tool.run(**kwargs)
+
 
         # Map action to tool function
         if action == "product_search_tool":
             output = _run_tool(product_search_tool, action_input or {})
             tool_results["product_search"] = output
-            
             if output.get("success"):
                 count = output.get("count", 0)
                 obs = f"Found {count} product(s). "
@@ -143,21 +168,16 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"No products found: {output.get('message')}"
-        
+
         elif action == "document_search_tool":
-            # Make a defensive copy so we never mutate caller input
             action_input = dict(action_input or {})
-            # If we already know the product but the LLM forgot to add context,
-            # inject it to dramatically improve search quality
             if identified_product and not action_input.get("product_context"):
                 model = identified_product.get("model")
                 name = identified_product.get("name")
                 if model or name:
                     action_input["product_context"] = model or name
-
             output = _run_tool(document_search_tool, action_input)
             tool_results["document_search"] = output
-            
             if output.get("success"):
                 count = output.get("count", 0)
                 obs = f"Found {count} document(s). "
@@ -167,14 +187,12 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"No documents found: {output.get('message')}"
-        
+
         elif action == "vision_search_tool":
-            # Inject ticket_images into action_input
             action_input = dict(action_input or {})
             action_input["image_urls"] = ticket_images
             output = _run_tool(vision_search_tool, action_input)
             tool_results["vision_search"] = output
-            
             if output.get("success"):
                 quality = output.get("match_quality")
                 count = output.get("count", 0)
@@ -183,11 +201,10 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"Vision search failed: {output.get('message')}"
-        
+
         elif action == "past_tickets_search_tool":
             output = _run_tool(past_tickets_search_tool, action_input or {})
             tool_results["past_tickets"] = output
-            
             if output.get("success"):
                 count = output.get("count", 0)
                 obs = f"Found {count} similar past ticket(s). "
@@ -197,14 +214,12 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"No past tickets found: {output.get('message')}"
-        
+
         elif action == "attachment_analyzer_tool":
-            # Inject attachments into action_input
             action_input = dict(action_input or {})
             action_input["attachments"] = attachments
             output = _run_tool(attachment_analyzer_tool, action_input)
             tool_results["attachment_analysis"] = output
-            
             if output.get("success"):
                 extracted = output.get("extracted_info", {})
                 models = extracted.get("model_numbers", [])
@@ -216,16 +231,51 @@ def _execute_tool(
                 return output, obs
             else:
                 return output, f"Attachment analysis failed: {output.get('message')}"
-        
+
+        elif action == "attachment_type_classifier_tool":
+            action_input = dict(action_input or {})
+            action_input["attachments"] = attachments
+            output = _run_tool(attachment_type_classifier_tool, action_input)
+            tool_results["attachment_classification"] = output
+            if output.get("success"):
+                obs = f"Attachment types classified: {[a['detected_type'] for a in output.get('attachments', [])]}"
+                return output, obs
+            else:
+                return output, f"Attachment type classification failed: {output.get('message')}"
+
+        elif action == "multimodal_document_analyzer_tool":
+            action_input = dict(action_input or {})
+            action_input["attachments"] = attachments
+            output = _run_tool(multimodal_document_analyzer_tool, action_input)
+            tool_results["multimodal_doc_analysis"] = output
+            if output.get("success"):
+                obs = f"Multimodal document analysis complete: {output.get('count', 0)} document(s) processed"
+                return output, obs
+            else:
+                return output, f"Multimodal document analysis failed: {output.get('message')}"
+
+        elif action == "ocr_image_analyzer_tool":
+            action_input = dict(action_input or {})
+            # Accepts image_urls list
+            if not action_input.get("image_urls"):
+                action_input["image_urls"] = ticket_images
+            output = _run_tool(ocr_image_analyzer_tool, action_input)
+            tool_results["ocr_image_analysis"] = output
+            if output.get("success"):
+                obs = f"OCR image analysis complete: {len(output.get('results', []))} image(s) processed"
+                return output, obs
+            else:
+                return output, f"OCR image analysis failed: {output.get('message')}"
+
         elif action == "finish_tool":
             output = _run_tool(finish_tool, action_input or {})
             obs = f"Finished. {output.get('summary', '')}"
             return output, obs
-        
+
         else:
             obs = f"Unknown tool: {action}"
             return {"error": obs, "success": False}, obs
-            
+
     except Exception as e:
         logger.error(f"Tool execution error: {e}", exc_info=True)
         obs = f"Tool execution failed: {str(e)}"

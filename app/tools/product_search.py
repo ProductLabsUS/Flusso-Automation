@@ -1,6 +1,6 @@
 """
-Product Search Tool - Pinecone Metadata Query
-Searches product catalog by model number or description
+Product Search Tool - FIXED VERSION
+Metadata-first strategy for exact model number lookups
 """
 
 import logging
@@ -37,24 +37,12 @@ def product_search_tool(
     Returns:
         {
             "success": bool,
-            "products": [
-                {
-                    "model_no": str,
-                    "product_title": str,
-                    "category": str,
-                    "sub_category": str,
-                    "finish": str,
-                    "collection": str,
-                    "image_urls": [str],
-                    "similarity_score": float
-                }
-            ],
+            "products": [...],
             "count": int,
             "search_method": "model_number" | "semantic" | "metadata",
             "message": str
         }
     """
-    # Handle case where neither query nor model_number provided
     if not query and not model_number:
         return {
             "success": False,
@@ -64,7 +52,6 @@ def product_search_tool(
             "message": "Either query or model_number must be provided"
         }
     
-    # Default query to model_number if not provided
     if not query and model_number:
         query = model_number
     
@@ -72,32 +59,41 @@ def product_search_tool(
     
     try:
         client = get_pinecone_client()
-        
-        # Normalize model_number for metadata lookup
         normalized_model = model_number.strip().upper() if model_number else None
 
-        # Strategy 1: Direct model number metadata filter (highest accuracy, no semantic fallback if match found)
+        # ============================================================
+        # STRATEGY 1: PURE METADATA LOOKUP (for exact model numbers)
+        # Use dummy vector to avoid semantic interference
+        # ============================================================
         if normalized_model:
-            logger.info(f"[PRODUCT_SEARCH] Strategy: Direct model number lookup")
-            vector = embed_text_clip(query)
+            logger.info(f"[PRODUCT_SEARCH] Strategy: Pure metadata lookup for model '{normalized_model}'")
+            
+            # Create dummy/zero vector (512 dimensions for CLIP)
+            # This prevents semantic similarity from interfering with metadata filter
+            dummy_vector = [0.0] * 512
             
             filter_dict = {"model_no": {"$eq": normalized_model}}
             if category:
                 filter_dict["product_category"] = {"$eq": category}
             
-            results = client.query_images(vector=vector, top_k=top_k, filter_dict=filter_dict)
+            results = client.query_images(vector=dummy_vector, top_k=top_k, filter_dict=filter_dict)
             
             if results:
                 products = _format_product_results(results)
+                logger.info(f"[PRODUCT_SEARCH] ✅ Found {len(products)} exact match(es) for model {normalized_model}")
                 return {
                     "success": True,
                     "products": products,
                     "count": len(products),
-                    "search_method": "model_number",
+                    "search_method": "metadata_exact",
                     "message": f"Found {len(products)} exact match(es) for model {normalized_model}"
                 }
+            else:
+                logger.warning(f"[PRODUCT_SEARCH] No exact match for model '{normalized_model}', falling back to semantic search")
         
-        # Strategy 2: Semantic search with optional category filter
+        # ============================================================
+        # STRATEGY 2: SEMANTIC SEARCH (fallback or when no model number)
+        # ============================================================
         logger.info(f"[PRODUCT_SEARCH] Strategy: Semantic search")
         vector = embed_text_clip(query)
         
@@ -109,6 +105,7 @@ def product_search_tool(
         
         if results:
             products = _format_product_results(results)
+            logger.info(f"[PRODUCT_SEARCH] ✅ Found {len(products)} semantic match(es)")
             return {
                 "success": True,
                 "products": products,
@@ -118,6 +115,7 @@ def product_search_tool(
             }
         
         # No results
+        logger.warning(f"[PRODUCT_SEARCH] ❌ No products found for query: '{query}'")
         return {
             "success": False,
             "products": [],
@@ -144,7 +142,7 @@ def _format_product_results(results: List[Dict[str, Any]]) -> List[Dict[str, Any
     for hit in results:
         metadata = hit.get("metadata", {})
         
-        # Extract image URLs (may be in different metadata fields)
+        # Extract image URLs
         image_urls = []
         if "image_url" in metadata:
             image_urls.append(metadata["image_url"])
@@ -159,7 +157,7 @@ def _format_product_results(results: List[Dict[str, Any]]) -> List[Dict[str, Any
             "finish": metadata.get("finish", "N/A"),
             "collection": metadata.get("collection", ""),
             "image_urls": image_urls,
-            "similarity_score": round(hit.get("score", 0) * 100),  # Convert to percentage
+            "similarity_score": round(hit.get("score", 0) * 100),
             "raw_score": hit.get("score", 0)
         }
         
