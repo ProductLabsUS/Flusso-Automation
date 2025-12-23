@@ -246,6 +246,21 @@ def build_sources_html(
     return sources_html
 
 
+def build_agent_console_section() -> str:
+    """
+    Small HTML section with a button linking to the Agent Console.
+    Appears at the bottom of all draft responses to help human agents
+    quickly lookup product details by model number or product ID.
+    """
+    url = "https://flusso-agent-console-git-556176295262.us-west2.run.app/"
+    return f"""
+    <div style="margin-top:16px; padding-top:12px; border-top:1px dashed #e5e7eb; display:flex; align-items:center; gap:12px;">
+        <a href="{url}" target="_blank" rel="noopener noreferrer" style="display:inline-block; background:#0ea5e9; color:#ffffff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:600;">Open Agent Console</a>
+        <div style="color:#475569; font-size:13px;">Agent Console: lookup product details by <strong>model no.</strong> or <strong>product ID</strong>.</div>
+    </div>
+    """
+
+
 def draft_final_response(state: TicketState) -> Dict[str, Any]:
     """
     Generate final response to customer.
@@ -313,7 +328,7 @@ def draft_final_response(state: TicketState) -> Dict[str, Any]:
         logger.info(f"{STEP_NAME} | Generated system error note in {duration:.2f}s")
         
         return {
-            "draft_response": error_header + error_details,
+            "draft_response": error_header + error_details + build_agent_console_section(),
             "overall_confidence": 0.0,
             "is_system_error": True,
             "audit_events": add_audit_event(
@@ -374,7 +389,7 @@ def draft_final_response(state: TicketState) -> Dict[str, Any]:
 </div>
 """
         
-        response_with_header = info_header + html_response + private_note_html
+        response_with_header = info_header + html_response + private_note_html + build_agent_console_section()
         
         duration = time.time() - start_time
         logger.info(f"{STEP_NAME} | ✅ Generated info-request response in {duration:.2f}s")
@@ -627,7 +642,7 @@ RETRIEVED CONTEXT:
 
 """
         # Combine: confidence header + response + sources
-        response_with_confidence = confidence_header + html_response + sources_html
+        response_with_confidence = confidence_header + html_response + sources_html + build_agent_console_section()
 
         duration = time.time() - start_time
         logger.info(f"{STEP_NAME} | ✅ Generated response ({len(response_text)} chars) in {duration:.2f}s")

@@ -1,13 +1,13 @@
 """
-Freshdesk Ticket Poller - Local Development
-Continuously polls Freshdesk for new tickets and processes them through the workflow.
+Freshdesk Ticket Poller - Local Development (ReACT Agent)
+Continuously polls Freshdesk for new tickets and processes them through the ReACT workflow.
 
 Usage:
     python poll_freshdesk.py
 
 This script:
 1. Checks for new/updated tickets every 30 seconds
-2. Automatically runs the workflow for each new ticket
+2. Automatically runs the ReACT agent workflow for each new ticket
 3. Tracks processed tickets to avoid duplicates
 """
 
@@ -27,8 +27,8 @@ load_dotenv()
 
 import requests
 from app.config.settings import settings
-from app.graph.graph_builder import build_graph
-from app.graph.state import TicketState
+from app.graph.graph_builder_react import build_react_graph
+from app.graph.state import TicketState as ReactAgentState
 
 # Configure logging
 logging.basicConfig(
@@ -78,10 +78,10 @@ class FreshdeskPoller:
         return hashlib.sha256(key.encode()).hexdigest()[:16]
     
     def initialize(self):
-        """Initialize the workflow graph"""
-        logger.info("🚀 Initializing Flusso Workflow...")
-        self.graph = build_graph()
-        logger.info("✅ Workflow graph ready")
+        """Initialize the ReACT agent workflow graph"""
+        logger.info("🚀 Initializing Flusso ReACT Agent Workflow...")
+        self.graph = build_react_graph()
+        logger.info("✅ ReACT workflow graph ready")
     
     def fetch_recent_tickets(self) -> list:
         """Fetch tickets created/updated in the last hour"""
@@ -135,54 +135,27 @@ class FreshdeskPoller:
         logger.info(f"   Priority: {ticket.get('priority', 'N/A')}")
         logger.info(f"{'='*60}")
         
-        # Build initial state
-        initial_state: TicketState = {
+        # Build initial state for ReACT agent
+        initial_state: ReactAgentState = {
             "ticket_id": str(ticket_id),
-            "freshdesk_webhook_payload": {"ticket_id": ticket_id},
-            
-            # Required defaults
-            "ticket_subject": "",
-            "ticket_text": "",
-            "ticket_images": [],
-            "requester_email": "",
-            "requester_name": "",
-            "ticket_type": None,
-            "priority": None,
-            "tags": [],
-            "created_at": None,
-            "updated_at": None,
-            
-            # Routing flags
-            "has_text": False,
-            "has_image": False,
-            
-            # Customer info
-            "customer_type": None,
-            "customer_metadata": {},
-            "vip_rules": {},
-            
-            # RAG results
-            "text_retrieval_results": [],
-            "image_retrieval_results": [],
-            "past_ticket_results": [],
-            "multimodal_context": "",
-            
-            # Decision values
-            "product_match_confidence": 0.0,
-            "hallucination_risk": 0.0,
-            "enough_information": False,
-            "vip_compliant": True,
-            
-            # Response
-            "clarification_message": None,
-            "draft_response": None,
-            "final_response_public": None,
-            "final_private_note": None,
-            "resolution_status": None,
-            "extra_tags": [],
-            
-            # Audit trail
             "audit_events": [{"event": "poller_triggered", "ticket_id": ticket_id}],
+            
+            # ReACT-specific initialization
+            "react_iterations": [],
+            "react_total_iterations": 0,
+            "react_status": "pending",
+            "react_final_reasoning": "",
+            
+            # Product identification
+            "identified_product": None,
+            "product_identification_method": None,
+            "product_confidence": 0.0,
+            
+            # Gathered resources
+            "gathered_documents": [],
+            "gathered_images": [],
+            "gathered_past_tickets": [],
+            "attachment_analysis": {},
         }
         
         try:
@@ -191,13 +164,19 @@ class FreshdeskPoller:
             duration = time.time() - start_time
             
             logger.info(f"\n✅ Ticket #{ticket_id} completed in {duration:.1f}s")
-            logger.info(f"   Resolution: {final_state.get('resolution_status', 'N/A')}")
+            logger.info(f"   Resolution: {final_state.get('resolution_decision', 'N/A')}")
             logger.info(f"   Category: {final_state.get('ticket_category', 'N/A')}")
+            logger.info(f"   ReACT Iterations: {final_state.get('react_total_iterations', 0)}")
+            logger.info(f"   ReACT Status: {final_state.get('react_status', 'N/A')}")
+            logger.info(f"   Product Identified: {final_state.get('identified_product') is not None}")
             
             return {
                 "success": True,
                 "ticket_id": ticket_id,
-                "resolution": final_state.get('resolution_status'),
+                "resolution": final_state.get('resolution_decision'),
+                "category": final_state.get('ticket_category'),
+                "react_iterations": final_state.get('react_total_iterations', 0),
+                "product_identified": final_state.get('identified_product') is not None,
                 "duration": duration
             }
             
