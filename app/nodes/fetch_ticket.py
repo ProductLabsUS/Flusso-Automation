@@ -1,6 +1,7 @@
 """
 Fetch Ticket Node - FIXED VERSION
 Now properly stores BOTH attachment metadata AND full attachment objects
+Enhanced with workflow start time tracking for centralized logging
 """
 
 import logging
@@ -15,6 +16,7 @@ from app.utils.pii_masker import mask_email, mask_name
 from app.utils.detailed_logger import (
     start_workflow_log, log_node_start, log_node_complete, get_current_log
 )
+from app.nodes.audit_log import set_workflow_start_time
 
 logger = logging.getLogger(__name__)
 STEP_NAME = "1️⃣ FETCH_TICKET"
@@ -35,6 +37,9 @@ def fetch_ticket_from_freshdesk(state: TicketState) -> Dict[str, Any]:
     logger.info(f"{'='*60}")
     logger.info(f"{STEP_NAME} | Starting for ticket #{ticket_id}")
     logger.info(f"{'='*60}")
+    
+    # Track workflow start time for centralized logging
+    set_workflow_start_time(str(ticket_id), start_time)
     
     workflow_log = start_workflow_log(str(ticket_id))
     node_log = log_node_start("fetch_ticket", {"ticket_id": ticket_id})

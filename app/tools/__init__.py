@@ -2,8 +2,11 @@
 Tools Package for ReACT Agent
 """
 
-# IMPORT FROM THE CSV WRAPPER
-from app.tools.product_search_from_csv import product_search_tool
+# PRIMARY PRODUCT SEARCH - JSON-based comprehensive catalog
+from app.tools.product_catalog_tool import product_catalog_tool
+
+# Legacy product search (CSV-based) - kept for backwards compatibility
+from app.tools.product_search_from_csv import product_search_tool as product_search_tool_legacy
 
 # Import other tools
 from app.tools.document_search import document_search_tool
@@ -16,7 +19,8 @@ from app.tools.ocr_image_analyzer import ocr_image_analyzer_tool
 from app.tools.attachment_classifier_tool import attachment_type_classifier_tool
 
 __all__ = [
-    "product_search_tool",
+    "product_catalog_tool",
+    "product_search_tool_legacy",
     "document_search_tool",
     "vision_search_tool",
     "past_tickets_search_tool",
@@ -27,8 +31,11 @@ __all__ = [
     "attachment_type_classifier_tool"
 ]
 
+# AVAILABLE_TOOLS: Maps tool names to actual tool objects
+# NOTE: Both "product_catalog_tool" and "product_search_tool" map to the same NEW tool
 AVAILABLE_TOOLS = {
-    "product_search_tool": product_search_tool,
+    "product_catalog_tool": product_catalog_tool,
+    "product_search_tool": product_catalog_tool,  # Alias for backwards compatibility
     "document_search_tool": document_search_tool,
     "vision_search_tool": vision_search_tool,
     "past_tickets_search_tool": past_tickets_search_tool,

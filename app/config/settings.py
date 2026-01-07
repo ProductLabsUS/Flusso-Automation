@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     use_vertex_ai_embeddings: bool = False  # Toggle for production
     vertex_ai_embedding_dimension: int = 512  # Match CLIP/Pinecone index
     
+    # ==========================================
+    # CENTRALIZED LOGGING (Phase 1-3)
+    # ==========================================
+    client_id: str = "default_client"       # Unique identifier for this client
+    log_collector_url: Optional[str] = None  # URL of centralized log collector API
+    log_collector_api_key: Optional[str] = None  # API key for log collector
+    enable_centralized_logging: bool = True  # Enable/disable centralized logging
+    
     def validate_all(self) -> None:
         """Validate critical settings with comprehensive checks"""
         errors = []
