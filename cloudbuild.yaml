@@ -1,0 +1,43 @@
+steps:
+  # Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-t', 'gcr.io/$PROJECT_ID/flusso-webhook:$COMMIT_SHA',
+      '-t', 'gcr.io/$PROJECT_ID/flusso-webhook:latest',
+      '-f', 'Dockerfile.cloudrun',
+      '.'
+    ]
+
+  # Push to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/flusso-webhook:$COMMIT_SHA']
+    
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/flusso-webhook:latest']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [
+      'run', 'deploy', 'flusso-webhook',
+      '--image', 'gcr.io/$PROJECT_ID/flusso-webhook:$COMMIT_SHA',
+      '--region', 'us-central1',
+      '--platform', 'managed',
+      '--allow-unauthenticated',
+      '--min-instances', '1',
+      '--max-instances', '10',
+      '--memory', '2Gi',
+      '--cpu', '2',
+      '--timeout', '600',
+      '--set-secrets', 'FRESHDESK_API_KEY=freshdesk-api-key:latest,FRESHDESK_DOMAIN=freshdesk-domain:latest,GEMINI_API_KEY=gemini-api-key:latest,GEMINI_FILE_SEARCH_STORE_ID=gemini-file-search-store-id:latest,PINECONE_API_KEY=pinecone-api-key:latest,PINECONE_IMAGE_INDEX=pinecone-image-index:latest,PINECONE_TICKETS_INDEX=pinecone-tickets-index:latest',
+      '--set-env-vars', 'ENVIRONMENT=production,LOG_LEVEL=INFO,PINECONE_ENV=us-east-1'
+    ]
+
+# Increase timeout for large builds
+timeout: 1200s
+
+# Build artifacts storage
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

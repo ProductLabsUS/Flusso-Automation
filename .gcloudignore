@@ -1,0 +1,61 @@
+# Google Cloud Build Ignore File
+# Excludes files from being uploaded to Cloud Build
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed for build)
+documentation/
+*.md
+!README.md
+
+# Test files
+test_*.py
+*_test.py
+
+# Cache and temp files
+.cache/
+*.log
+*.tmp
+
+# Local development
+.env
+.env.local
+ngrok.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Render-specific (not used in GCP)
+render.yaml
+Procfile
+
+# Local testing scripts
+poll_freshdesk.py
+run_local_server.py
+test_workflow_manual.py
