@@ -10,6 +10,7 @@ from google import genai
 from google.genai import types
 
 from app.config.settings import settings
+from app.utils.retry import retry_gemini_call
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class LLMClient:
         
         logger.info(f"LLM client initialized with model: {self.model_name}, max_tokens: {self.max_tokens}")
     
+    @retry_gemini_call
     def call_llm(
         self,
         system_prompt: str,
@@ -165,11 +167,11 @@ class LLMClient:
             error_str = str(e).lower()
             logger.error(f"❌ Error calling LLM: {e}", exc_info=True)
             
-            # For rate limit and quota errors, raise the exception so caller can handle it
-            # These are recoverable errors that the workflow should know about
-            if "429" in str(e) or "resource_exhausted" in error_str or "quota" in error_str or "rate" in error_str:
-                logger.error(f"🚨 Rate limit/quota error - raising exception for proper handling")
-                raise  # Re-raise to let caller handle rate limit appropriately
+            # For rate limit, quota, and 503 overload errors, raise the exception so caller can handle it
+            # These are transient errors that may succeed on retry
+            if any(indicator in error_str for indicator in ["429", "503", "resource_exhausted", "quota", "rate", "overloaded", "unavailable"]):
+                logger.error(f"🚨 Transient API error (rate limit/overload) - raising exception for retry handling")
+                raise  # Re-raise to let caller handle appropriately
             
             # For other errors, return safe defaults (backward compatibility)
             if response_format == "json":

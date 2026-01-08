@@ -12,6 +12,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
+    retry_if_exception,
     before_sleep_log,
     after_log,
 )
@@ -28,6 +29,15 @@ TRANSIENT_EXCEPTIONS: Tuple[Type[Exception], ...] = (
     ConnectionResetError,
     TimeoutError,
 )
+
+
+def is_gemini_transient_error(exception: Exception) -> bool:
+    """Check if exception is a transient Gemini API error (503, 429, overloaded, etc.)"""
+    error_str = str(exception).lower()
+    return any(indicator in error_str for indicator in [
+        "503", "429", "overloaded", "unavailable", 
+        "resource_exhausted", "quota", "rate limit"
+    ])
 
 
 def create_retry_decorator(
@@ -75,6 +85,16 @@ retry_embedding = create_retry_decorator(
     max_attempts=2,
     min_wait=1,
     max_wait=5,
+)
+
+# Gemini-specific retry for overload/rate limit errors
+retry_gemini_call = retry(
+    stop=stop_after_attempt(5),  # More attempts for transient errors
+    wait=wait_exponential(multiplier=2, min=2, max=60),  # Longer waits for overload
+    retry=retry_if_exception(is_gemini_transient_error),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    after=after_log(logger, logging.DEBUG),
+    reraise=True,
 )
 
 
