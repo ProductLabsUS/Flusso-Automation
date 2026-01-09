@@ -252,7 +252,8 @@ def build_agent_console_section() -> str:
     Appears at the bottom of all draft responses to help human agents
     quickly lookup product details by model number or product ID.
     """
-    url = "https://flusso-agent-console-git-556176295262.us-west2.run.app/"
+    from app.config.settings import settings
+    url = settings.agent_console_url
     return f"""
     <div style="margin-top:16px; padding-top:12px; border-top:1px dashed #e5e7eb; display:flex; align-items:center; gap:12px;">
         <a href="{url}" target="_blank" rel="noopener noreferrer" style="display:inline-block; background:#0ea5e9; color:#ffffff; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:600;">Open Agent Console</a>

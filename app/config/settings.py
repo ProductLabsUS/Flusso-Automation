@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     log_collector_api_key: Optional[str] = None  # API key for log collector
     enable_centralized_logging: bool = True  # Enable/disable centralized logging
     
+    # ==========================================
+    # AGENT CONSOLE
+    # ==========================================
+    agent_console_url: str  # URL for agent console button (required in .env)
+    
     def validate_all(self) -> None:
         """Validate critical settings with comprehensive checks"""
         errors = []
