@@ -529,6 +529,18 @@ Visual matches have low confidence. Reason: {vision_reason}
 - Focus on the customer's order/return request
 - DO NOT ask for product photos unless needed for the return
 """
+    elif ticket_category == "general":
+        category_guidance = """
+⚠️ CATEGORY: GENERAL INQUIRY / ACCOUNT UPDATE
+- This is a general request that does NOT involve product support
+- Could be: account update, address change, business name change, contact info update, or general question
+- DO NOT ask for product model numbers or photos
+- DO NOT assume this is a product-related request
+- Acknowledge the customer's request/information professionally
+- If it's an account/address update: Confirm you've received the information and will update records
+- If it's a general question: Answer directly or acknowledge you'll look into it
+- Keep response brief and professional
+"""
 
     meta = f"""
 TODAY'S DATE: {current_date} ({current_date_readable})

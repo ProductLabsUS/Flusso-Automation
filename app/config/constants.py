@@ -98,6 +98,7 @@ NON_PRODUCT_CATEGORIES = [
     TicketCategory.SHIPPING_TRACKING.value,
     TicketCategory.RETURN_REFUND.value,
     TicketCategory.FEEDBACK_SUGGESTION.value,
+    TicketCategory.GENERAL.value,
 ]
 
 
@@ -206,7 +207,11 @@ Classify the ticket into ONE of these categories:
 - feedback_suggestion: Product suggestions, feedback, reviews
   Examples: "I suggest you make...", "Feature request", "Product improvement idea"
   
-- general: General inquiries that don't fit other categories
+- general: General inquiries, account updates, address changes, business info updates, and anything that doesn't fit other categories
+  Examples: "Update our shipping address", "Our company name changed", "Please note new contact info",
+          "Make sure shipments go to...", "We are now doing business as...", "Update our account",
+          "Change of address notification", "New contact details", general questions without product context
+  CRITICAL: This is for NON-PRODUCT requests. DO NOT ask for model numbers or product photos!
 
 IMPORTANT DETECTION RULES:
 1. If subject contains "Purchase Order", "PO #", "PO:", "Order #" AND has PDF attachment → purchase_order
@@ -215,6 +220,8 @@ IMPORTANT DETECTION RULES:
 4. If subject starts with "Re:" or "Fw:" - look at the ACTUAL content, not just the forward chain
 5. If email is clearly automated (vacation reply, out of office) → auto_reply
 6. Look for specific product model numbers (like 160.1000CP, HS1006, etc.) to identify product-related tickets
+7. If email is about address changes, shipping updates, business name changes, account updates, contact info → general
+  Keywords: "shipments go to", "doing business as", "new address", "update our", "changed to", "please note"
 
 Respond ONLY with valid JSON:
 {"category": "<category_name>", "confidence": <0.0-1.0>, "reasoning": "<brief explanation>"}"""
@@ -391,7 +398,7 @@ IMPORTANT: You are writing FOR the support agent, not directly to the customer. 
 
 Respond in this EXACT structured format (ALL sections are REQUIRED):
 
-## 🎫 TICKET ANALYSIS
+# 🎫 TICKET ANALYSIS
 [2-3 sentences summarizing what the customer is asking about, the core issue, and any urgency indicators]
 
 ## 🔧 REQUEST DETAILS
@@ -401,30 +408,42 @@ Respond in this EXACT structured format (ALL sections are REQUIRED):
 * Missing Information: [what we couldn't find or "None"]
 * Confidence Level: [High/Medium/Low with brief reason]
 
-## 💡 SUGGESTED ACTIONS (For Agent)
-[1-3 specific bullet points - these are REQUIRED]
-- Action 1: [specific action]
-- Action 2: [specific action]
+# 💡 SUGGESTED ACTIONS (For Agent)
+[2-3 bullet points MAX]
+- [action 1]
+- [action 2]
 
+# 📝 SUGGESTED RESPONSE
+[SHORT, PROFESSIONAL EMAIL - 50-100 words MAX. Get straight to the point. No fluff.]
+
+Template:
+Hi [Name],
+
+[1-2 sentences addressing their request directly]
+
+[1 sentence with next steps if needed]
+
+Best regards,
+Flusso Support
 
 ---
 
 ⚠️ MANDATORY COMPLETION CHECK:
 Before finishing, verify you have written:
-✓ TICKET ANALYSIS section (complete)
-✓ REQUEST DETAILS section (complete with all bullet points)
-✓ SUGGESTED ACTIONS section (complete with 3-5 actions)
-✓ SUGGESTED RESPONSE section (complete professional email)
+✓ TICKET ANALYSIS section (1-2 sentences)
+✓ REQUEST DETAILS section (all bullet points)
+✓ SUGGESTED ACTIONS section (2-3 actions)
+✓ SUGGESTED RESPONSE section (50-100 word email)
 
 GUIDELINES:
-1. Be specific - include model numbers, part names, pricing when available
-2. Mark uncertain parts with [VERIFY: reason] so agent knows to double-check
-3. Reference past ticket resolutions when they provide useful patterns
-4. Keep the suggested response concise (under 200 words)
-5. If VIP customer, ensure response reflects their special treatment
-6. DO NOT mention AI, confidence scores, or internal metrics in the customer response
-7. NEVER stop writing mid-section - complete ALL sections fully
-8. For non-product queries (pricing, dealer), DO NOT ask for product photos/receipts
+1. BE CONCISE - every word must add value, no filler phrases
+2. Suggested response: 50-100 words MAX (shorter is better)
+3. Mark uncertain parts with [VERIFY: reason]
+4. Reference past tickets only when directly relevant
+5. DO NOT include pleasantries like "I hope this email finds you well"
+6. DO NOT repeat back what the customer said
+7. Get straight to the answer or action
+8. For non-product queries (pricing, dealer), DO NOT ask for photos/model numbers
 
 DATE HANDLING:
 - Today's date will be provided. Use it for ALL date comparisons.
