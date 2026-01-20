@@ -398,22 +398,22 @@ IMPORTANT: You are writing FOR the support agent, not directly to the customer. 
 
 Respond in this EXACT structured format (ALL sections are REQUIRED):
 
-# 🎫 TICKET ANALYSIS
+🎫 TICKET ANALYSIS
 [2-3 sentences summarizing what the customer is asking about, the core issue, and any urgency indicators]
 
-## 🔧 REQUEST DETAILS
+🔧 REQUEST DETAILS
 * Request Type: [pricing_request / dealer_inquiry / product_issue / general / etc.]
 * Product/Part Mentioned: [model/part number or "N/A" if not relevant]
 * Key Information Found: [what we found in our search results]
 * Missing Information: [what we couldn't find or "None"]
 * Confidence Level: [High/Medium/Low with brief reason]
 
-# 💡 SUGGESTED ACTIONS (For Agent)
+💡 SUGGESTED ACTIONS (For Agent)
 [2-3 bullet points MAX]
 - [action 1]
 - [action 2]
 
-# 📝 SUGGESTED RESPONSE
+📝 SUGGESTED RESPONSE
 [SHORT, PROFESSIONAL EMAIL - 50-100 words MAX. Get straight to the point. No fluff.]
 
 Template:
