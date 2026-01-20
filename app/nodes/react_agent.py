@@ -441,6 +441,7 @@ def react_agent_loop(state: TicketState) -> Dict[str, Any]:
     # Vision quality tracking (IMPORTANT for downstream confidence checks)
     vision_match_quality = "NO_MATCH"  # Default
     vision_relevance_reason = ""
+    vision_products = []  # Products found specifically via vision_search_tool
     
     llm = get_llm_client()
     
@@ -682,6 +683,17 @@ NOTE: You may deviate from the plan based on tool results. The plan is a guide, 
                 vision_relevance_reason = tool_output.get("reasoning", "")
                 logger.info(f"{STEP_NAME} | 🖼️ Vision match quality: {vision_match_quality}")
                 
+                # Capture ALL vision matches for source_products (Visual Matches section)
+                for match in matches:
+                    vision_products.append({
+                        "model_no": match.get("model_no"),
+                        "product_title": match.get("product_title"),
+                        "category": match.get("category"),
+                        "similarity_score": match.get("similarity_score", 0),
+                        "match_level": "🟢" if match.get("similarity_score", 0) >= 85 else "🟡" if match.get("similarity_score", 0) >= 70 else "🔴",
+                        "source_type": "vision_search"
+                    })
+                
                 # Vision can also identify product
                 if matches and not identified_product:
                     top = matches[0]
@@ -890,6 +902,17 @@ NOTE: You may deviate from the plan based on tool results. The plan is a guide, 
             }
         )["audit_events"]
         
+        # Still populate legacy fields even on error, so source data is available
+        error_legacy_updates = _populate_legacy_fields(
+            gathered_documents=gathered_documents,
+            gathered_images=gathered_images,
+            gathered_past_tickets=gathered_past_tickets,
+            identified_product=identified_product,
+            product_confidence=product_confidence,
+            gemini_answer=gemini_answer,
+            vision_products=vision_products
+        )
+        
         return {
             "react_iterations": iterations,
             "react_total_iterations": final_iteration_count,
@@ -912,6 +935,7 @@ NOTE: You may deviate from the plan based on tool results. The plan is a guide, 
             "workflow_error_type": workflow_error_type,
             "workflow_error_node": workflow_error_node,
             "is_system_error": True,
+            **error_legacy_updates,  # Include source_products, source_documents, etc.
             "audit_events": audit_events
         }
     
@@ -1024,7 +1048,8 @@ NOTE: You may deviate from the plan based on tool results. The plan is a guide, 
         gathered_past_tickets=gathered_past_tickets,
         identified_product=identified_product,
         product_confidence=product_confidence,
-        gemini_answer=gemini_answer
+        gemini_answer=gemini_answer,
+        vision_products=vision_products  # Pass vision-specific products for Visual Matches section
     )
     
     audit_events = add_audit_event(

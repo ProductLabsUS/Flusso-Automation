@@ -782,10 +782,17 @@ def _populate_legacy_fields(
     gathered_past_tickets: List[Dict],
     identified_product: Dict = None,
     product_confidence: float = 0.0,
-    gemini_answer: str = ""
+    gemini_answer: str = "",
+    vision_products: List[Dict] = None
 ) -> Dict[str, Any]:
     """
     Populate legacy RAG result fields for compatibility with existing nodes.
+    
+    Args:
+        vision_products: Products found specifically via vision_search_tool.
+                        These are shown in the "Visual Matches" section.
+                        Products from text-based search (product_catalog_tool) 
+                        should NOT be shown in Visual Matches.
     """
     
     # Normalize and validate inputs
@@ -905,16 +912,20 @@ def _populate_legacy_fields(
             "uri": doc.get("uri", "")
         })
     
+    # source_products should ONLY contain products from vision_search_tool
+    # This ensures the "Visual Matches" section only shows when vision was used
     source_products = []
-    if identified_product:
-        source_products.append({
-            "rank": 1,
-            "model_no": identified_product.get("model", "Unknown"),
-            "product_title": identified_product.get("name", "Unknown"),
-            "category": identified_product.get("category", "Unknown"),
-            "similarity_score": int(product_confidence * 100),
-            "source_type": "react_agent"
-        })
+    if vision_products:
+        for i, vp in enumerate(vision_products[:5]):  # Limit to 5
+            source_products.append({
+                "rank": i + 1,
+                "model_no": vp.get("model_no", "Unknown"),
+                "product_title": vp.get("product_title", "Unknown"),
+                "category": vp.get("category", "Unknown"),
+                "similarity_score": vp.get("similarity_score", 0),
+                "match_level": vp.get("match_level", "🟡"),
+                "source_type": "vision_search"
+            })
     
     source_tickets = []
     for i, ticket in enumerate(past_tickets[:5]):

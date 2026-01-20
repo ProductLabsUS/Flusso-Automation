@@ -149,7 +149,7 @@ class TicketState(TypedDict, total=False):
     # ==========================================
     gemini_answer: Optional[str]  # Raw answer from Gemini file search
     source_documents: List[Dict[str, Any]]  # Structured docs from Gemini grounding
-    source_products: List[Dict[str, Any]]   # Structured products from Vision
+    source_products: List[Dict[str, Any]]   # Products from vision_search_tool ONLY (Visual Matches section)
     source_tickets: List[Dict[str, Any]]    # Structured tickets from Past Tickets
     
     # ==========================================
