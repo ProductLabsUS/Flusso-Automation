@@ -353,9 +353,23 @@ def draft_final_response(state: TicketState) -> Dict[str, Any]:
     
     # Make sure this is a legitimate info request, not a fallback
     evidence_decision = evidence_analysis.get("resolution_action", "")
+    
+    # Extract customer message - handle both dict and string formats
+    if isinstance(info_request_response, dict):
+        customer_message_check = info_request_response.get("customer_message", "")
+    else:
+        customer_message_check = str(info_request_response) if info_request_response else ""
+    
+    # Only treat as legitimate info request if:
+    # 1. needs_more_info flag is set
+    # 2. There's actual content in info_request_response
+    # 3. Evidence decision is request_info or escalate
+    # 4. Confidence is actually low
+    # 5. The customer_message is not empty (empty = use LLM-generated response)
     is_legitimate_info_request = (
         needs_more_info 
         and info_request_response 
+        and customer_message_check.strip()  # Must have actual message content
         and evidence_decision in ["request_info", "escalate"]
         and evidence_analysis.get("final_confidence", 0) < 0.5  # Only if actually low confidence
     )

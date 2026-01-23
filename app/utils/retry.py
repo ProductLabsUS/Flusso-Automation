@@ -17,6 +17,8 @@ from tenacity import (
     after_log,
 )
 import requests
+from urllib3.exceptions import SSLError as Urllib3SSLError
+from requests.exceptions import SSLError as RequestsSSLError
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,9 @@ TRANSIENT_EXCEPTIONS: Tuple[Type[Exception], ...] = (
     requests.exceptions.ChunkedEncodingError,
     ConnectionResetError,
     TimeoutError,
+    # SSL errors (e.g., unexpected EOF while reading) are often transient
+    Urllib3SSLError,
+    RequestsSSLError,
 )
 
 

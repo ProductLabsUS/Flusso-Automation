@@ -186,6 +186,63 @@ def analyze_evidence(
     # (they're all in the same product family/category)
     # ===============================
     
+    # ===============================
+    # 5a. NEW: Handle "Product Inquiry" scenarios
+    # ===============================
+    # When customer mentions specific products AND documents were found for those products,
+    # trust the agent's analysis even if we can't "identify" the product visually.
+    # This handles cases like:
+    # - "Can I upgrade PBV1005 to PBV2105 by changing the cartridge?"
+    # - "What's the difference between model A and model B?"
+    # The customer already told us the products - we just need to answer their question.
+    # ===============================
+    
+    if document_results and agent_identified_product and agent_confidence >= 0.60:
+        # Check if document_search found relevant specs (not just generic docs)
+        found_product_specs = False
+        docs_with_product_info = 0
+        product_related_docs = []
+        
+        agent_model = agent_identified_product.get("model", "")
+        
+        for doc in document_results:
+            doc_content = (doc.get("content_preview", "") or doc.get("content", "") or "").lower()
+            doc_title = (doc.get("title", "") or "").lower()
+            doc_score = doc.get("relevance_score", 0) or doc.get("score", 0)
+            
+            # Check if doc contains product specifications
+            spec_indicators = [
+                "specifications", "spec", "output", "diverter", "flow rate",
+                "gpm", "psi", "dimensions", "valve body", "ports", "cartridge",
+                "handle", "installation", "features", "warranty"
+            ]
+            has_specs = any(indicator in doc_content or indicator in doc_title for indicator in spec_indicators)
+            
+            # Check if doc mentions specific models (from agent or similar)
+            if has_specs and doc_score >= 0.75:
+                docs_with_product_info += 1
+                product_related_docs.append(doc.get("title", "Unknown"))
+        
+        # If we found 2+ documents with product specs, trust the agent's analysis
+        if docs_with_product_info >= 2:
+            found_product_specs = True
+            logger.info(f"{STEP_NAME} | ✅ Product inquiry mode: Found {docs_with_product_info} spec documents")
+            logger.info(f"{STEP_NAME} | Spec docs: {product_related_docs[:3]}")
+            
+            bundle.primary_product = {
+                "model": agent_model,
+                "name": agent_identified_product.get("name", ""),
+                "category": agent_identified_product.get("category", ""),
+                "source": "product_inquiry_docs",
+                "confidence": max(agent_confidence, 0.75)  # Boost confidence for product inquiries with docs
+            }
+            bundle.resolution_action = "proceed"
+            bundle.final_confidence = max(agent_confidence, 0.75)
+            bundle.evidence_summary = f"Product inquiry: Agent found {docs_with_product_info} specification documents for {agent_model}. Trust agent's technical analysis."
+            
+            logger.info(f"{STEP_NAME} | ✅ PRODUCT INQUIRY PATH: Trusting agent analysis with {docs_with_product_info} spec docs")
+            return bundle
+    
     agent_product_trusted = False
     if agent_identified_product and agent_confidence >= 0.70:
         agent_model = agent_identified_product.get("model", "")
@@ -529,78 +586,45 @@ def generate_info_request_response(
     ticket_category: str = ""
 ) -> Dict[str, str]:
     """
-    Generate SHORT, PROFESSIONAL customer-facing message when more info is needed.
+    Generate info request response - returns empty to force LLM-generated response.
+    
+    NOTE: We no longer use hardcoded placeholder messages like:
+    "To locate the correct replacement part, please provide model number..."
+    
+    This caused issues where the agent had already gathered relevant specs but
+    the placeholder message was sent anyway (see ticket #97841 analysis).
+    
+    Instead, return empty so the workflow uses the LLM-generated response
+    based on actual gathered context.
     
     Returns:
         {
-            "customer_message": str,
-            "private_note": str
+            "customer_message": "" (empty - forces LLM generation),
+            "private_note": str (summary for human agent)
         }
     """
-    # Ensure customer name is set
-    if not customer_name or customer_name.lower() in ["unknown", "customer", ""]:
-        customer_name = "there"
+    # Build private note for human agent review
+    possible_product = bundle.primary_product.get("model") if bundle.primary_product else None
     
-    # Detect what the customer is asking about
+    # Detect request type for private note
     ticket_lower = (ticket_text + " " + ticket_subject).lower()
-    
     is_parts_request = any(word in ticket_lower for word in ["part", "replacement", "spare", "broken", "repair", "fix", "cartridge", "diverter"])
     is_warranty_request = any(word in ticket_lower for word in ["warranty", "defect", "issue", "problem", "leak"])
     is_return_request = any(word in ticket_lower for word in ["return", "refund", "exchange", "send back"])
-    
-    # Build SHORT customer message
-    greeting = f"Hi {customer_name},"
-    
-    # Simple, direct request based on type
-    if is_parts_request:
-        message_body = """To locate the correct replacement part, please provide:
-
-• **Model number** (found on product label)
-• **Part description** or photo of the specific part needed"""
-    
-    elif is_warranty_request:
-        message_body = """To process your warranty request, please provide:
-
-• **Model number** (found on product label)
-• **Proof of purchase** (receipt or invoice with date)"""
-    
-    elif is_return_request:
-        message_body = """To assist with your return, please provide:
-
-• **Order number** or invoice
-• **Model number** of the product"""
-    
-    else:
-        message_body = """To assist you, please provide:
-
-• **Model number** (found on product label or packaging)"""
-    
-    # Build complete SHORT customer message
-    customer_message = f"""{greeting}
-
-Thank you for contacting Flusso Support.
-
-{message_body}
-
-We'll respond promptly once we receive this information.
-
-Best regards,
-Flusso Support"""
-    
-    # Shorter private note
-    possible_product = bundle.primary_product.get("model") if bundle.primary_product else None
     request_type = "Parts" if is_parts_request else "Warranty" if is_warranty_request else "Return" if is_return_request else "General"
     
     private_note = f"""🤖 **AI Summary**
 • Request: {request_type}
 • Confidence: {int(bundle.final_confidence * 100)}%
 • Best guess: {possible_product or 'Unknown'}
-• Reason: {bundle.conflict_reason or 'Need model number confirmation'}
+• Reason: {bundle.conflict_reason or 'Insufficient evidence for confident response'}
 
-**Action:** Await customer response with model number."""
+**Action:** Review gathered documents and respond based on available information."""
     
+    # Return empty customer_message - this forces the workflow to use 
+    # the LLM-generated response based on actual gathered context
     return {
-        "customer_message": customer_message,
+        "customer_message": "",
         "private_note": private_note
     }
 

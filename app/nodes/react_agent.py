@@ -763,6 +763,99 @@ NOTE: You may deviate from the plan based on tool results. The plan is a guide, 
                         # Agent deviated from plan - log but don't increment
                         logger.info(f"{STEP_NAME} | 📋 Agent deviated: expected {expected_tool}, got {action}")
             
+            # ========================================
+            # EARLY TERMINATION CHECK - Stop when answer is found
+            # ========================================
+            # Detect when we have sufficient evidence to answer the question
+            # This prevents redundant iterations after finding the answer
+            should_early_terminate = False
+            early_terminate_reason = ""
+            
+            if action != "finish_tool" and iteration_num >= 4:  # Only after a few iterations
+                # Count high-quality spec documents
+                spec_doc_count = 0
+                spec_indicators = [
+                    "spec", "specification", "manual", "diagram", "parts",
+                    "installation", "output", "diverter", "valve", "cartridge",
+                    "pressure", "flow", "gpm", "dimensions"
+                ]
+                
+                for doc in gathered_documents:
+                    if isinstance(doc, dict):
+                        doc_title = (doc.get("title", "") or "").lower()
+                        doc_content = (doc.get("content_preview", "") or "").lower()
+                        doc_score = doc.get("relevance_score", 0.5)
+                        
+                        # Count as spec doc if it contains technical indicators
+                        has_specs = any(ind in doc_title or ind in doc_content for ind in spec_indicators)
+                        if has_specs and doc_score >= 0.7:
+                            spec_doc_count += 1
+                
+                # Condition 1: Multiple spec documents found for a product inquiry
+                # (Agent already has technical specs to answer the question)
+                if spec_doc_count >= 3 and identified_product:
+                    should_early_terminate = True
+                    early_terminate_reason = f"Found {spec_doc_count} specification documents for {identified_product.get('model', 'product')}"
+                
+                # Condition 2: Document search returned a direct answer (gemini_answer)
+                # and we have product context
+                elif gemini_answer and len(gemini_answer) > 200 and identified_product:
+                    should_early_terminate = True
+                    early_terminate_reason = f"Gemini provided comprehensive answer ({len(gemini_answer)} chars) with product context"
+                
+                # Condition 3: Multiple spec docs found even without catalog match
+                # (Product may exist in docs but not in catalog - e.g., PBV.2105)
+                elif spec_doc_count >= 4 and len(gathered_documents) >= 5:
+                    should_early_terminate = True
+                    early_terminate_reason = f"Found {spec_doc_count} specification documents - sufficient for technical inquiry"
+                
+                # Condition 4: Agent is repeating searches (detected by duplicate attempts)
+                # and we already have useful information
+                elif "Duplicate search attempt" in str(tool_output) and (spec_doc_count >= 2 or gemini_answer):
+                    should_early_terminate = True
+                    early_terminate_reason = "Agent repeating searches - proceeding with gathered information"
+            
+            if should_early_terminate:
+                logger.info(f"{STEP_NAME} | 🎯 EARLY TERMINATION: {early_terminate_reason}")
+                
+                # Build finish tool input with gathered data
+                finish_input = {
+                    "product_identified": identified_product is not None,
+                    "product_details": identified_product or {},
+                    "relevant_documents": gathered_documents,
+                    "relevant_images": gathered_images,
+                    "past_tickets": gathered_past_tickets,
+                    "confidence": max(product_confidence, 0.7) if spec_doc_count >= 3 else product_confidence,
+                    "reasoning": f"Early termination: {early_terminate_reason}. Gathered {len(gathered_documents)} docs, {len(gathered_past_tickets)} past tickets."
+                }
+                
+                # Execute finish tool directly
+                from app.tools.finish import finish_tool
+                if hasattr(finish_tool, "invoke"):
+                    tool_output = finish_tool.invoke(finish_input)
+                elif hasattr(finish_tool, "run"):
+                    tool_output = finish_tool.run(**finish_input)
+                else:
+                    tool_output = finish_tool._run(**finish_input)
+                
+                iterations.append({
+                    "iteration": iteration_num,
+                    "thought": f"Early termination triggered: {early_terminate_reason}",
+                    "action": "finish_tool",
+                    "action_input": finish_input,
+                    "observation": "Workflow completed via early termination",
+                    "tool_output": tool_output,
+                    "timestamp": time.time(),
+                    "duration": 0.0
+                })
+                
+                # Update final state
+                identified_product = tool_output.get("product_details", identified_product)
+                product_confidence = tool_output.get("confidence", product_confidence)
+                
+                logger.info(f"{STEP_NAME} | ✅ Early termination complete at iteration {iteration_num}")
+                break
+            
             # Check if finished
             if action == "finish_tool" and tool_output.get("finished"):
                 logger.info(f"{STEP_NAME} | ✅ Agent called finish_tool - stopping loop")

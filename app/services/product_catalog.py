@@ -400,9 +400,60 @@ class ProductCatalog:
     # SEARCH METHODS
     # =========================================================================
     
+    def _normalize_model_variants(self, model_no: str) -> List[str]:
+        """
+        Generate all possible variant forms of a model number.
+        
+        Handles common format variations:
+        - PBV2105 vs PBV.2105 (missing dot before numbers)
+        - PBV-2105 vs PBV.2105 (dash vs dot)
+        - PBV 2105 vs PBV.2105 (space vs dot)
+        - HS6270 vs HS.6270 (no separator vs dot)
+        
+        Returns:
+            List of possible normalized variants to search
+        """
+        base = model_no.strip().upper()
+        variants = [base]
+        
+        # Remove all separators and try with dots
+        no_sep = base.replace(".", "").replace("-", "").replace(" ", "")
+        variants.append(no_sep)
+        
+        # If it looks like LETTERS+NUMBERS without separator, try adding a dot
+        # Pattern: ABC1234 -> ABC.1234
+        import re
+        match = re.match(r'^([A-Z]+)(\d+)([A-Z]*)$', no_sep)
+        if match:
+            letters, numbers, suffix = match.groups()
+            # Try with dot between letters and numbers
+            variants.append(f"{letters}.{numbers}{suffix}")
+            # Try with various letter prefixes (e.g., PBV2105 -> PBV.2105)
+            if len(letters) >= 2:
+                variants.append(f"{letters}.{numbers}{suffix}")
+        
+        # If has dot, try without
+        if "." in base:
+            variants.append(base.replace(".", ""))
+        
+        # If has dash, try with dot
+        if "-" in base:
+            variants.append(base.replace("-", "."))
+            variants.append(base.replace("-", ""))
+        
+        # If has space, try with dot
+        if " " in base:
+            variants.append(base.replace(" ", "."))
+            variants.append(base.replace(" ", ""))
+        
+        # Return unique variants
+        return list(dict.fromkeys(variants))  # Preserve order, remove duplicates
+    
     def search_exact_model(self, model_no: str) -> Optional[Dict[str, Any]]:
         """
         Find product by exact model number match.
+        
+        Handles variant formats like PBV2105 vs PBV.2105.
         
         Args:
             model_no: Model number to search for
@@ -410,12 +461,20 @@ class ProductCatalog:
         Returns:
             Product dict if found, None otherwise
         """
-        normalized = model_no.strip().upper()
-        return self.model_index.get(normalized)
+        # Try all possible variant normalizations
+        variants = self._normalize_model_variants(model_no)
+        
+        for variant in variants:
+            if variant in self.model_index:
+                return self.model_index[variant]
+        
+        return None
     
     def search_by_group(self, group_no: str) -> List[Dict[str, Any]]:
         """
         Find all products in a group (all finish variations).
+        
+        Handles variant formats like PBV2105 vs PBV.2105.
         
         Args:
             group_no: Group/base model number
@@ -423,17 +482,28 @@ class ProductCatalog:
         Returns:
             List of products in the group
         """
-        normalized = group_no.strip().upper()
+        # Try all possible variant normalizations
+        variants = self._normalize_model_variants(group_no)
         
-        # Direct group match
-        if normalized in self.group_index:
-            return self.group_index[normalized]
+        for variant in variants:
+            # Direct group match
+            if variant in self.group_index:
+                return self.group_index[variant]
         
         # Try prefix match (group might be partial)
+        normalized = group_no.strip().upper()
         matches = []
         for group_key, products in self.group_index.items():
             if group_key.startswith(normalized):
                 matches.extend(products)
+        
+        # Also try prefix match with no-separator variant
+        if not matches:
+            no_sep = normalized.replace(".", "").replace("-", "").replace(" ", "")
+            for group_key, products in self.group_index.items():
+                group_no_sep = group_key.replace(".", "").replace("-", "")
+                if group_no_sep.startswith(no_sep) or no_sep.startswith(group_no_sep):
+                    matches.extend(products)
         
         return matches
     
