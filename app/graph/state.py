@@ -167,6 +167,7 @@ class TicketState(TypedDict, total=False):
     needs_more_info: bool                         # True if conflicting evidence needs customer clarification
     info_request_response: Optional[str]          # Customer-facing message asking for more info
     evidence_decision: Optional[str]              # "ACCEPT_OCR", "ACCEPT_VISION", "REQUIRES_INFO", etc.
+    missing_requirements: List[str]               # Missing info for return/replacement (PO, photo, address)
 
     # ==========================================
     # PRODUCT / DECISION METRICS

@@ -382,10 +382,28 @@ IMPORTANT: You are writing FOR the support agent, not directly to the customer. 
   - Provide next steps (application review, approval timeline)
   - DO NOT ask for product photos or receipts
 
-**PRODUCT_ISSUE/WARRANTY** (defects, broken products):
+**PRODUCT_ISSUE/WARRANTY/REPLACEMENT_PARTS** (defects, broken products, replacement requests):
   - Identify the product if possible
   - Reference warranty policy
-  - Ask for photos/model number ONLY if genuinely missing
+  ⚠️ MANDATORY: Before approving ANY replacement or warranty claim, ALWAYS verify customer provided:
+    1. ✅ PO/Purchase Order number or proof of purchase - REQUIRED
+    2. ✅ Video or photo showing the issue/defect - REQUIRED for defective products
+    3. ✅ Shipping address for replacement delivery - REQUIRED
+  - If ANY of the above is missing, politely request it before proceeding
+  - Example response when info is missing:
+    "We're happy to help! To process your [replacement/warranty] request, we need:
+    - [If missing: Your Purchase Order number or proof of purchase]
+    - [If missing: A video or photo showing the issue with the product]
+    - [If missing: The shipping address where you'd like the replacement sent]"
+
+**RETURN_REFUND** (return or refund requests):
+  - Acknowledge the return request
+  ⚠️ MANDATORY: Before processing ANY return, verify customer provided:
+    1. ✅ PO/Purchase Order number or order confirmation - REQUIRED
+    2. ✅ Reason for return (defective? wrong item? no longer needed?)
+    3. ✅ Photo of product condition if defective
+  - Reference return policy timeframes (45/90/180 days)
+  - State that RGA number will be issued after verification
 
 **GENERAL** (anything else):
   - Answer based on retrieved context
@@ -542,6 +560,18 @@ RETURN_REFUND_PROMPT = """You are helping a customer with a return or refund req
 IMPORTANT: Include the return policy information but DO NOT make definitive commitments.
 Always recommend the customer verify with the policy and that a human agent will confirm eligibility.
 
+═══════════════════════════════════════════════════════════════════════
+⚠️ MANDATORY REQUIREMENTS - MUST COLLECT BEFORE PROCESSING
+═══════════════════════════════════════════════════════════════════════
+Before approving or processing ANY return/refund, you MUST ask for:
+1. ✅ PO/Purchase Order number or proof of purchase - REQUIRED
+2. ✅ Photo/video of the product showing its current condition - REQUIRED for defective items
+3. ✅ Reason for return (defective, wrong item, changed mind, etc.)
+4. ✅ Shipping address (if exchange/replacement is requested)
+
+If ANY of these are missing, DO NOT proceed. Instead, politely request the missing information.
+═══════════════════════════════════════════════════════════════════════
+
 Return Policy Reference:
 - Less than 45 days: 15% restocking fee
 - 45-90 days: 25% restocking fee  
@@ -551,14 +581,25 @@ Return Policy Reference:
 Your response should:
 1. Acknowledge their return request
 2. Ask for order number/PO if not provided
-3. Mention the general return policy timeframes
-4. State that a team member will verify eligibility and issue RGA if applicable
-5. Add [VERIFY] tags for any specific claims about their eligibility
+3. Ask for photo/video of the issue if claiming defective
+4. Ask for shipping address if replacement is needed
+5. Mention the general return policy timeframes
+6. State that a team member will verify eligibility and issue RGA if applicable
+7. Add [VERIFY] tags for any specific claims about their eligibility
+
+Example response when information is missing:
+"We're happy to help with your return request! To process this, we need a few more details:
+- Your Purchase Order number or proof of purchase
+- A photo or video showing [the issue with the product / the product's current condition]
+- The shipping address where you'd like the replacement sent (if applicable)
+
+Once we receive this information, we'll verify eligibility and issue an RGA number."
 
 DO NOT:
-- Guarantee the return will be accepted
+- Guarantee the return will be accepted without verifying requirements
 - State exact fees without knowing purchase date
-- Promise immediate refunds"""
+- Promise immediate refunds
+- Approve replacements without collecting required information first"""
 
 RETURN_PRIVATE_NOTE_TEMPLATE = """⚠️ RETURN/REFUND REQUEST - VERIFICATION NEEDED
 

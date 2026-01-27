@@ -18,6 +18,7 @@ from app.utils.detailed_logger import (
     log_node_start, log_node_complete, log_llm_interaction
 )
 from app.services.resource_links_service import get_resource_links_for_response
+from app.services.policy_service import get_relevant_policy
 
 logger = logging.getLogger(__name__)
 STEP_NAME = "1️⃣4️⃣ DRAFT_RESPONSE"
@@ -471,6 +472,68 @@ def draft_final_response(state: TicketState) -> Dict[str, Any]:
     identified_product = state.get("identified_product", None)
     product_confidence_for_links = state.get("product_confidence", 0.0) or confidence
     
+    # === Missing Requirements Check (for returns/replacements/warranty) ===
+    missing_requirements = state.get("missing_requirements", []) or []
+    ticket_images = state.get("ticket_images", []) or []
+    ticket_attachments = state.get("ticket_attachments", []) or []
+    
+    # Auto-detect missing requirements for return/replacement/warranty tickets
+    if ticket_category in ["return_refund", "replacement_parts", "warranty_claim", "product_issue"]:
+        ticket_lower = (ticket_text + " " + subject).lower()
+        
+        # Check for PO/order number
+        has_po = any(keyword in ticket_lower for keyword in [
+            "po ", "po:", "po#", "purchase order", "order #", "order number", 
+            "invoice", "receipt", "confirmation"
+        ])
+        
+        # Check for shipping address
+        has_address = any(keyword in ticket_lower for keyword in [
+            "address", "ship to", "send to", "deliver to", "street", "city", "zip", "state"
+        ])
+        
+        # Check for photo/video evidence
+        has_media = len(ticket_images) > 0 or any(
+            att.get("content_type", "").startswith("image") or 
+            att.get("content_type", "").startswith("video")
+            for att in ticket_attachments
+        )
+        
+        # Build missing requirements list
+        auto_missing = []
+        if not has_po and "PO number" not in missing_requirements:
+            auto_missing.append("PO/Purchase Order number or proof of purchase")
+        if not has_media and ticket_category in ["warranty_claim", "product_issue", "replacement_parts"]:
+            if "photo of defect" not in missing_requirements and "video" not in str(missing_requirements).lower():
+                auto_missing.append("Photo or video showing the issue/defect")
+        if not has_address and ticket_category in ["return_refund", "replacement_parts", "warranty_claim"]:
+            if "shipping address" not in missing_requirements:
+                auto_missing.append("Shipping address for replacement delivery")
+        
+        # Combine with any requirements the agent flagged
+        missing_requirements = list(set(missing_requirements + auto_missing))
+        
+        logger.info(f"{STEP_NAME} | 🔍 Requirements check: PO={has_po}, Media={has_media}, Address={has_address}")
+        logger.info(f"{STEP_NAME} | ⚠️ Missing requirements: {missing_requirements}")
+
+    # === Fetch Policy Context for Response Generation ===
+    policy_context = ""
+    policy_requirements_list = []
+    try:
+        policy_result = get_relevant_policy(
+            ticket_category=ticket_category,
+            ticket_text=ticket_text,
+            keywords=None
+        )
+        policy_context = policy_result.get("primary_section", "")[:2500]  # Limit for prompt size
+        policy_requirements_list = policy_result.get("policy_requirements", [])
+        policy_section_name = policy_result.get("primary_section_name", "General")
+        logger.info(f"{STEP_NAME} | 📜 Policy loaded: {policy_section_name} ({len(policy_context)} chars, {len(policy_requirements_list)} requirements)")
+    except Exception as e:
+        logger.warning(f"{STEP_NAME} | ⚠️ Could not load policy: {e}")
+        policy_context = ""
+        policy_requirements_list = []
+
     node_log.input_summary = {
         "subject": subject[:100],
         "ticket_text_length": len(ticket_text),
@@ -524,6 +587,29 @@ Visual matches have low confidence. Reason: {vision_reason}
 
     # Build category-specific guidance
     category_guidance = ""
+    missing_requirements_guidance = ""
+    
+    # Build missing requirements guidance if applicable
+    if missing_requirements:
+        missing_list = "\n".join(f"   - {req}" for req in missing_requirements)
+        missing_requirements_guidance = f"""
+═══════════════════════════════════════════════════════════════════════
+🔴 MISSING REQUIREMENTS - MUST REQUEST BEFORE PROCEEDING
+═══════════════════════════════════════════════════════════════════════
+The following required information is MISSING from the customer's ticket:
+{missing_list}
+
+⚠️ DO NOT approve or promise to process this request until ALL above items are received.
+⚠️ Your response MUST politely ask the customer to provide the missing information.
+
+Example response format:
+"We're happy to help with your [request type]! To process this, we need a few more details:
+{missing_list}
+
+Once we receive this information, we can proceed with your request."
+═══════════════════════════════════════════════════════════════════════
+"""
+    
     if ticket_category == "pricing_request":
         category_guidance = """
 ⚠️ CATEGORY: PRICING REQUEST
@@ -541,12 +627,33 @@ Visual matches have low confidence. Reason: {vision_reason}
 - Provide next steps for application review
 - DO NOT ask for product photos or model numbers
 """
-    elif ticket_category in ["shipping_tracking", "return_refund"]:
+    elif ticket_category == "return_refund":
+        category_guidance = f"""
+⚠️ CATEGORY: RETURN/REFUND REQUEST
+- Customer wants to return a product or get a refund
+- MANDATORY: Collect PO/order number, reason for return, and photo if defective
+- Reference return policy (45/90/180 day windows with restocking fees)
+- State RGA number will be issued after verification
+- DO NOT approve the return without required information
+{missing_requirements_guidance}
+"""
+    elif ticket_category in ["replacement_parts", "warranty_claim", "product_issue"]:
+        category_guidance = f"""
+⚠️ CATEGORY: {ticket_category.upper().replace('_', ' ')}
+- Customer is reporting a product issue or requesting replacement
+- MANDATORY: Before processing, verify we have:
+  1. PO/Purchase Order or proof of purchase
+  2. Photo/video showing the issue/defect  
+  3. Shipping address for replacement
+- DO NOT approve replacement without required information
+- If information is missing, politely request it
+{missing_requirements_guidance}
+"""
+    elif ticket_category in ["shipping_tracking"]:
         category_guidance = f"""
 ⚠️ CATEGORY: {ticket_category.upper().replace('_', ' ')}
 - This is about order logistics, not product identification
-- Focus on the customer's order/return request
-- DO NOT ask for product photos unless needed for the return
+- Focus on the customer's order/tracking request
 """
     elif ticket_category == "general":
         category_guidance = """
@@ -578,12 +685,33 @@ DECISION METRICS:
 {vision_guidance}
 """
 
+    # Build policy section for prompt
+    policy_prompt_section = ""
+    if policy_context or policy_requirements_list:
+        requirements_text = "\n".join(f"  - {req}" for req in policy_requirements_list) if policy_requirements_list else "  (See policy text below)"
+        policy_prompt_section = f"""
+═══════════════════════════════════════════════════════════════════════
+📜 COMPANY POLICY - YOU MUST FOLLOW THESE RULES
+═══════════════════════════════════════════════════════════════════════
+
+**Key Requirements for this request type:**
+{requirements_text}
+
+**Full Policy Section:**
+{policy_context}
+
+⚠️ IMPORTANT: Your response MUST comply with the policy above. 
+If the policy requires specific information (PO, photos, address, etc.) 
+that the customer has NOT provided, you MUST ask for it before proceeding.
+═══════════════════════════════════════════════════════════════════════
+"""
+
     user_prompt = f"""CUSTOMER TICKET:
 Subject: {subject}
 Description: {ticket_text}
 
 TICKET CATEGORY: {ticket_category}
-
+{policy_prompt_section}
 RETRIEVED CONTEXT:
 {context}
 

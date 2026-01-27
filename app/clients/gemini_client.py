@@ -31,12 +31,14 @@ class GeminiClient:
         
         self.client = genai.Client(api_key=api_key)
         self.model_name = settings.llm_model
+        self.file_search_model = getattr(settings, 'llm_file_search_model', settings.llm_model)  # Use dedicated model for file search
         self.store_id = settings.gemini_file_search_store_id
         
         if not self.store_id:
             raise ValueError("GEMINI_FILE_SEARCH_STORE_ID not configured")
         
         logger.info(f"Gemini client initialized with model: {self.model_name}")
+        logger.info(f"File search model: {self.file_search_model}")
         logger.info(f"File search store: {self.store_id}")
     
     def search_files(self, query: str, top_k: int = 10) -> List[RetrievalHit]:
@@ -55,7 +57,7 @@ class GeminiClient:
         try:
             # CORRECTED: Use proper File Search tool configuration
             response = self.client.models.generate_content(
-                model=self.model_name,
+                model=self.file_search_model,  # Use dedicated file search model (gemini-2.5-pro)
                 contents=query,
                 config=types.GenerateContentConfig(
                     tools=[
@@ -224,7 +226,7 @@ class GeminiClient:
             
             # Make API call
             response = self.client.models.generate_content(
-                model=self.model_name,
+                model=self.file_search_model,  # Use dedicated file search model (gemini-2.5-pro)
                 contents=query,
                 config=types.GenerateContentConfig(**config_params)
             )

@@ -1,6 +1,7 @@
 """
-Document Search Tool - Gemini File Search
-Searches product manuals, FAQs, installation guides, warranty docs
+Document Search Tool - Gemini File Search (PRIMARY KNOWLEDGE BASE)
+The most important tool for product information - contains ALL parts specifications,
+product manuals, installation guides, troubleshooting docs, and technical diagrams.
 """
 
 import logging
@@ -16,44 +17,88 @@ logger = logging.getLogger(__name__)
 def document_search_tool(
     query: str,
     product_context: Optional[str] = None,
-    top_k: int = 5
+    top_k: int = 8
 ) -> Dict[str, Any]:
     """
-    Search product documentation using Gemini File Search.
+    🌟 PRIMARY KNOWLEDGE BASE - Gemini File Search
     
-    🔍 WHAT THIS TOOL CONTAINS:
-    ✅ Product specifications and technical details
-    ✅ Installation guides and manuals
-    ✅ Parts lists with part numbers 
-    ✅ Technical diagrams and schematics
+    This is the MOST IMPORTANT tool for product information. It contains
+    comprehensive documentation for ALL Flusso products.
     
+    ═══════════════════════════════════════════════════════════════════════
+    📚 WHAT THIS TOOL CONTAINS (COMPREHENSIVE LIBRARY):
+    ═══════════════════════════════════════════════════════════════════════
+    
+    ✅ PRODUCT MANUALS & SPECIFICATIONS:
+       - Complete product specification sheets (dimensions, materials, finishes)
+       - Technical diagrams with measurements
+       - Flow rates, pressure ratings, certifications
+       - Compatibility information
+    
+    ✅ PARTS LISTS & DIAGRAMS:
+       - Exploded parts diagrams showing ALL components
+       - Part numbers for every component (cartridges, handles, valves, etc.)
+       - MSRP/pricing for replacement parts
+       - Which parts fit which products
+    
+    ✅ INSTALLATION GUIDES:
+       - Step-by-step installation instructions
+       - Required tools and materials
+       - Rough-in dimensions and requirements
+       - Mounting templates and clearances
+    
+    ✅ TROUBLESHOOTING & REPAIR:
+       - Common problems and solutions
+       - Diagnostic steps for issues (leaks, low pressure, etc.)
+       - Repair procedures with diagrams
+       - When to replace vs repair
+    
+    ✅ POLICY DOCUMENTS:
+       - Warranty terms and coverage
+       - Return/refund policies
+       - MAP pricing agreements
+       - Dealer program information
+    
+    ═══════════════════════════════════════════════════════════════════════
     ❌ WHAT THIS TOOL DOES NOT CONTAIN:
-    ❌ Customer order information
+    ═══════════════════════════════════════════════════════════════════════
+    ❌ Customer order information or purchase history
     ❌ Purchase orders or invoices
     ❌ Shipping/tracking information
     ❌ Customer account details
     
-    ⚠️ CRITICAL: Do NOT use order numbers to search this tool.
-    Order numbers are NOT product identifiers and will not yield relevant results.
+    ⚠️ CRITICAL: Do NOT search with order numbers - they are NOT product identifiers!
+    
+    ═══════════════════════════════════════════════════════════════════════
+    🎯 WHEN TO USE THIS TOOL:
+    ═══════════════════════════════════════════════════════════════════════
+    
+    USE FOR:
+    • "What's the part number for the cartridge in model X?" → Parts list
+    • "How do I install the 100.2420?" → Installation guide
+    • "My faucet is leaking from the handle" → Troubleshooting guide
+    • "What are the dimensions of model Y?" → Spec sheet
+    • "Is this product compatible with..." → Technical specs
+    • "What's covered under warranty?" → Policy documents
+    • "How do I become a dealer?" → Dealer program info
+    • ANY question about product specifications, parts, or installation
     
     Args:
-        query: What information you're looking for (e.g., "installation instructions", 
-               "leak repair", "warranty period", "part number for diverter")
-        product_context: Product model/name to provide context (e.g., "HS6270MB shower head" or "260.2693T")
-        top_k: Number of documents to retrieve (default: 5)
+        query: The specific information you need. Be detailed!
+               Examples:
+               - "replacement cartridge part number for diverter valve"
+               - "installation rough-in dimensions and mounting requirements"
+               - "troubleshooting steps for handle that won't turn off"
+               - "warranty coverage for chrome finish discoloration"
+        product_context: The product model number or name (IMPORTANT for accuracy)
+                        Examples: "100.2420MB", "Serie 100 tub faucet", "PBV1005"
+        top_k: Number of documents to retrieve (default: 8)
     
     Returns:
         {
             "success": bool,
-            "documents": [
-                {
-                    "title": str,
-                    "content_preview": str,
-                    "relevance_score": float,
-                    "source_type": "manual" | "faq" | "warranty" | "guide"
-                }
-            ],
-            "gemini_answer": str,  # Direct answer from Gemini if available
+            "documents": [...],      # Relevant documents with previews
+            "gemini_answer": str,    # AI-synthesized answer from documents
             "count": int,
             "message": str
         }
@@ -84,68 +129,162 @@ def document_search_tool(
             # Extract model number from product context if available
             model_number = _extract_model_number(product_context)
             
-            # Build product-specific search query
+            # Build product-specific search query (enhanced synthesis prompt)
             search_query = f"""
-PRODUCT-SPECIFIC DOCUMENTATION SEARCH:
+═══════════════════════════════════════════════════════════════════════
+PRODUCT-SPECIFIC DOCUMENTATION SEARCH
+═══════════════════════════════════════════════════════════════════════
 
-Target Product: {product_context}
-{f"Model Number: {model_number}" if model_number else ""}
-Customer Issue: {clean_query}
+**Target Product:** {product_context}
+**Model Number:** {model_number if model_number else "Not specified"}
+**Customer Query:** {clean_query}
 
-CRITICAL INSTRUCTIONS:
-1. PRIORITIZE documents that specifically mention the product model "{model_number or product_context}"
-2. Search for product manuals, specifications, installation guides, and troubleshooting docs for THIS SPECIFIC PRODUCT
-3. DO NOT return general policy documents unless directly relevant to the specific issue
-4. Focus on finding technical documentation, user manuals, parts lists for the identified product
+═══════════════════════════════════════════════════════════════════════
+SEARCH INSTRUCTIONS (CRITICAL):
+═══════════════════════════════════════════════════════════════════════
 
-DOCUMENT PRIORITY ORDER:
-1. Product manual or datasheet for {model_number or product_context}
-2. Technical specifications for this product model
-3. Installation/assembly guide for this specific product
-4. Troubleshooting guide for product-specific issues
-5. Parts diagram or replacement parts list
-6. Warranty/returns policy ONLY if customer is asking about warranty/replacement
+1. **PRIORITIZE** documents that specifically mention model "{model_number or product_context}"
+2. Search across ALL document types:
+   - Product specification sheets and datasheets
+   - Parts diagrams and exploded views
+   - Parts lists with part numbers and pricing
+   - Installation manuals and guides
+   - Troubleshooting guides and FAQs
+   
+3. **EXTRACT** specific information:
+   - Part numbers (format: XXX.XXXX or similar)
+   - Dimensions and measurements
+   - Step-by-step instructions
+   - Compatibility information
+   - Pricing/MSRP when available
 
-Return specific, actionable information with part numbers, dimensions, and step-by-step instructions where applicable.
+4. **DOCUMENT PRIORITY ORDER:**
+   1. Product manual/datasheet for {model_number or product_context}
+   2. Parts diagram showing all components and part numbers
+   3. Installation guide with step-by-step instructions
+   4. Troubleshooting guide for specific issues
+   5. Warranty/policy documents (only if query relates to warranty/returns)
+
+═══════════════════════════════════════════════════════════════════════
+RESPONSE FORMAT:
+═══════════════════════════════════════════════════════════════════════
+
+Provide a comprehensive answer that includes:
+- Direct answer to the customer's question
+- Specific part numbers when relevant
+- Step-by-step instructions if applicable
+- Dimensions/specifications if relevant
+- Cite the exact document source for each piece of information
+
+Be thorough and technical - this information will help support agents assist customers.
+"""
+        else:
+            search_query = f"""
+═══════════════════════════════════════════════════════════════════════
+CUSTOMER SUPPORT DOCUMENTATION SEARCH
+═══════════════════════════════════════════════════════════════════════
+
+**Customer Query:** {clean_query}
+
+═══════════════════════════════════════════════════════════════════════
+SEARCH INSTRUCTIONS:
+═══════════════════════════════════════════════════════════════════════
+
+Find the most relevant documentation to answer this customer's question.
+
+**DOCUMENT PRIORITY ORDER:**
+1. Installation guides - if asking about setup/mounting/assembly
+2. Troubleshooting guides - if reporting problems/defects/leaks
+3. Parts diagrams and lists - if asking about missing/replacement parts
+4. Product specifications - if asking about dimensions/compatibility/features
+5. Warranty/policy documents - if asking about coverage/claims/returns
+6. Dealer program info - if asking about partnerships/accounts
+
+**EXTRACT AND INCLUDE:**
+- Specific part numbers when relevant
+- Step-by-step instructions
+- Dimensions and specifications
+- Policy terms and conditions
+- Contact information if applicable
+
+Provide actionable information that support agents can use immediately.
 Cite the exact document source for each piece of information.
 """
-        else:
-            search_query = f"""
-CUSTOMER SUPPORT DOCUMENTATION SEARCH:
-
-Customer Issue: {clean_query}
-
-TASK:
-Find the most relevant documentation to help resolve this customer's issue.
-
-DOCUMENT PRIORITY ORDER:
-1. Installation guides if asking about setup/mounting/assembly
-2. Troubleshooting guides if reporting problems/defects/leaks
-3. Parts diagrams/lists if asking about missing/replacement parts
-4. Warranty documentation if asking about coverage/claims
-5. Product specifications if asking about dimensions/compatibility/features
-
-Return specific, actionable information with part numbers and step-by-step instructions where applicable.
-"""
         
-        # Build context-aware system instruction
+        # Build context-aware system instruction (enhanced synthesis approach)
         if product_context:
             model_number = _extract_model_number(product_context)
-            system_instruction = f"""You are a product documentation search assistant specializing in finding product-specific technical documentation.
+            system_instruction = f"""You are a Product Support Expert Assistant for Flusso Faucets.
 
-CRITICAL: Prioritize finding documentation that specifically mentions or relates to the product model "{model_number or product_context}".
+**Your Role:**
+Help support agents research product information quickly and accurately. Provide comprehensive answers about products, installation, specifications, and troubleshooting.
 
-Your job is to:
-1. Find product manuals, datasheets, and specifications for the specific product model
-2. Locate installation guides, troubleshooting docs, and parts lists for this product
-3. Only include general policy documents if the customer is specifically asking about warranty/returns
-4. AVOID returning generic policy documents when product-specific documentation is needed
+**CRITICAL: Focus on product model "{model_number or product_context}"**
 
-Be thorough and cite the exact document source for each piece of information."""
+**Guidelines:**
+
+1. **Prioritize Data Sources:**
+   - For PRODUCT-SPECIFIC QUERIES: Start with specifications, parts lists, and technical documentation
+   - Search product manuals, datasheets, and parts diagrams for the specific model
+   - Include part numbers, dimensions, and step-by-step instructions
+
+2. **Response Structure:**
+   - Begin with a direct answer to the question
+   - Include relevant specifications (dimensions, part numbers, materials)
+   - Provide step-by-step instructions for installation/troubleshooting
+   - Reference video/image resources when available
+   - End with source citations
+
+3. **Accuracy:**
+   - Only provide information from the given documents
+   - If information is missing, explicitly state it
+   - Never make up specifications or part numbers
+   - Distinguish between different product variants (finishes, sizes)
+
+4. **Be Thorough:**
+   - Include ALL relevant part numbers found
+   - List ALL steps in procedures
+   - Mention ALL compatibility requirements
+   - Note ANY warnings or precautions
+
+**Document Types to Search:**
+- Product specification sheets
+- Parts diagrams with part numbers
+- Installation manuals
+- Troubleshooting guides
+- Warranty documentation (only if relevant)
+
+Cite the exact document source for each piece of information."""
         else:
-            system_instruction = """You are a product documentation search assistant.
-Your job is to find the most relevant documentation to help answer the customer's question.
-Be thorough and cite multiple relevant sources."""
+            system_instruction = """You are a Product Support Expert Assistant for Flusso Faucets.
+
+**Your Role:**
+Help support agents research product information quickly and accurately. Provide comprehensive answers about products, installation, specifications, policies, and troubleshooting.
+
+**Guidelines:**
+
+1. **Prioritize Data Sources:**
+   - For GENERAL QUERIES (policies, warranties, programs): Use policy documents
+   - For PRODUCT QUERIES: Use specification sheets, manuals, parts lists
+   - For TROUBLESHOOTING: Use troubleshooting guides and FAQs
+
+2. **Response Structure:**
+   - Begin with a direct answer to the question
+   - Include relevant details (specifications, steps, requirements)
+   - Reference document sources
+   - End with source citations
+
+3. **Accuracy:**
+   - Only provide information from the given documents
+   - If information is missing or unclear, explicitly state it
+   - Never make up specifications or instructions
+
+4. **Be Thorough:**
+   - Include ALL relevant information found
+   - List ALL steps in procedures
+   - Note ANY important conditions or requirements
+
+Cite the exact document source for each piece of information."""
         
         # Execute Gemini File Search with sources
         result = client.search_files_with_sources(

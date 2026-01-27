@@ -163,6 +163,40 @@ LOCAL_FALLBACK_POLICY = """
 - Extended return window: 90 days full refund (no restocking fee)
 - Priority response required (same day if possible)
 - Can override standard policies with manager approval note
+
+---
+
+## 6. ⚠️ MANDATORY REQUIREMENTS FOR ALL RETURNS/REPLACEMENTS
+
+### 6.1 BEFORE Processing ANY Return, Replacement, or Warranty Claim
+The BOT/Agent MUST always request and verify the following information BEFORE approving or processing:
+
+1. ✅ **PO/Purchase Order Number** - REQUIRED
+   - If not provided, ask: "Can you please provide your Purchase Order number or proof of purchase?"
+   
+2. ✅ **Video/Photo of the Issue** - REQUIRED for defective products
+   - If not provided, ask: "Can you send us a video or photo showing the issue with the product?"
+   - This helps verify the defect before shipping replacements
+   
+3. ✅ **Shipping Address** - REQUIRED for replacements
+   - If not provided, ask: "What address should we send the replacement to?"
+
+### 6.2 Example Response Template
+When ANY of the above is missing, respond with:
+```
+We're happy to help! To process your request, we need a few more details:
+- [If missing: Your Purchase Order number or proof of purchase]
+- [If missing: A video or photo showing the issue with the product]
+- [If missing: The shipping address where you'd like the replacement sent]
+
+Once we receive this information, we can proceed with your [return/replacement/warranty claim].
+```
+
+### 6.3 NEVER DO THE FOLLOWING
+- ❌ DO NOT approve a replacement without PO/proof of purchase
+- ❌ DO NOT ship replacements without a confirmed shipping address
+- ❌ DO NOT process warranty claims for defective products without photo/video evidence
+- ❌ DO NOT assume information - always ask if not explicitly provided
 """
 
 

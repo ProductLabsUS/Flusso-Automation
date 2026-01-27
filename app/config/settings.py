@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     # LLM SETTINGS
     # ==========================================
     llm_model: str = "gemini-2.5-flash"
+    llm_file_search_model: str = "gemini-2.5-pro"  # More capable model for document search
     llm_temperature: float = 0.2
     llm_max_tokens: int = 8192  # Increased for complete structured responses
     
